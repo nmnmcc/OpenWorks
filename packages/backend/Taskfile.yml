@@ -1,0 +1,26 @@
+version: "3"
+
+tasks:
+  dev:
+    desc: Start backend dev server
+    cmd: yarn exec tsx watch src/index.ts
+
+  auth:gen:
+    desc: Generate Better Auth schema
+    cmd: yarn better-auth generate --config src/services/auth/static.ts --output src/services/database/schema/auth.ts -y
+
+  db:generate:
+    desc: Generate Drizzle migrations
+    cmd: yarn drizzle-kit generate
+
+  db:migrate:
+    desc: Run Drizzle migrations
+    cmd: yarn drizzle-kit migrate
+
+  db:push:
+    desc: Push schema changes to database
+    cmd: yarn drizzle-kit push
+
+  db:studio:
+    desc: Open Drizzle Studio
+    cmd: yarn drizzle-kit studio

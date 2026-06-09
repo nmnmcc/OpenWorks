@@ -1,0 +1,36 @@
+version: "3"
+
+includes:
+  frontend:
+    taskfile: "./packages/frontend/Taskfile.yml"
+    dir: "./packages/frontend"
+  backend:
+    taskfile: "./packages/backend/Taskfile.yml"
+    dir: "./packages/backend"
+
+tasks:
+  default:
+    cmd: task --list-all
+
+  dev:
+    desc: Start all dev servers
+    deps:
+      - frontend:dev
+      - backend:dev
+
+  build:
+    desc: Build all packages
+    deps:
+      - frontend:build
+
+  typecheck:
+    desc: Type check all packages
+    cmd: yarn tsc -b --noEmit
+
+  format:
+    desc: Format code with Prettier
+    cmd: yarn prettier --write .
+
+  format:check:
+    desc: Check code formatting
+    cmd: yarn prettier --check .

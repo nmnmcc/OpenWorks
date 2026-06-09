@@ -1,0 +1,14 @@
+version: "3"
+
+tasks:
+  dev:
+    desc: Start Next.js dev server with Turbopack
+    cmd: yarn next dev --turbopack
+
+  build:
+    desc: Build Next.js for production
+    cmd: yarn next build
+
+  start:
+    desc: Start Next.js production server
+    cmd: yarn next start
