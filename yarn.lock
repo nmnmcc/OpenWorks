@@ -2,7 +2,7 @@
 # Manual changes might be lost - proceed with caution!
 
 __metadata:
-  version: 9
+  version: 8
   cacheKey: 10c0
 
 "@alloc/quick-lru@npm:^5.2.0":
@@ -1199,6 +1199,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@faker-js/faker@npm:^10.4.0":
+  version: 10.4.0
+  resolution: "@faker-js/faker@npm:10.4.0"
+  checksum: 10c0/29f15e46f91757d654f6f42ac8313ac4aebb6591e2ebae7fdd8d36d5017490327ea67be37cff06d18303db54abf468524bcc7e4b1de53be4eb884c1f71d571c1
+  languageName: node
+  linkType: hard
+
 "@floating-ui/core@npm:^1.7.5":
   version: 1.7.5
   resolution: "@floating-ui/core@npm:1.7.5"
@@ -1697,7 +1704,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openworks/backend@workspace:packages/backend":
+"@openworks/backend@workspace:*, @openworks/backend@workspace:packages/backend":
   version: 0.0.0-use.local
   resolution: "@openworks/backend@workspace:packages/backend"
   dependencies:
@@ -1705,6 +1712,7 @@ __metadata:
     "@casl/ability": "npm:^6.8.1"
     "@effect/platform-node": "npm:^4.0.0-beta.78"
     "@effect/sql-pg": "npm:^4.0.0-beta.78"
+    "@faker-js/faker": "npm:^10.4.0"
     "@nmnmcc/ability": "npm:^0.2.0"
     "@types/pg": "npm:^8"
     better-auth: "npm:^1.6.15"
@@ -1712,7 +1720,9 @@ __metadata:
     drizzle-orm: "npm:1.0.0-rc.3"
     effect: "npm:^4.0.0-beta.78"
     ioredis: "npm:^5.11.1"
+    meilisearch: "npm:^0.58.0"
     pg: "npm:^8.21.0"
+    uuid: "npm:^14.0.0"
   languageName: unknown
   linkType: soft
 
@@ -1722,9 +1732,11 @@ __metadata:
   dependencies:
     "@ark-ui/react": "npm:^5.37.2"
     "@effect/atom-react": "npm:4.0.0-beta.78"
+    "@openworks/backend": "workspace:*"
     "@tailwindcss/postcss": "npm:^4.3.0"
     "@types/react": "npm:^19.2.17"
     "@types/react-dom": "npm:^19.2.3"
+    better-auth: "npm:^1.6.15"
     clsx: "npm:^2.1.1"
     effect: "npm:4.0.0-beta.78"
     lucide-react: "npm:^1.17.0"
@@ -4381,6 +4393,13 @@ __metadata:
   dependencies:
     "@jridgewell/sourcemap-codec": "npm:^1.5.5"
   checksum: 10c0/299378e38f9a270069fc62358522ddfb44e94244baa0d6a8980ab2a9b2490a1d03b236b447eee309e17eb3bddfa482c61259d47960eb018a904f0ded52780c4a
+  languageName: node
+  linkType: hard
+
+"meilisearch@npm:^0.58.0":
+  version: 0.58.0
+  resolution: "meilisearch@npm:0.58.0"
+  checksum: 10c0/b3d9847d141a347972addd85d4ade6ac260994d13a63fd940c546e71da6e5a5bf131d170c727c8ab1feb34c5d30bde3ef627f2597e4a3d2833f4dd29e63f9c37
   languageName: node
   linkType: hard
 

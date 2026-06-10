@@ -1,38 +1,37 @@
 {
-	"compilerOptions": {
-		"plugins": [
-			{
-				"name": "@effect/language-service"
-			}
-		],
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ],
 
-		"module": "esnext",
-		"moduleResolution": "bundler",
-		"target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
 
-		"lib": ["esnext"],
-		"types": ["node"],
+    "lib": ["esnext"],
+    "types": ["node"],
 
-		"sourceMap": true,
-		"declaration": true,
-		"declarationMap": true,
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
 
-		"noUncheckedIndexedAccess": true,
-		"exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
 
-		"noImplicitReturns": true,
-		"noImplicitOverride": true,
-		"noUnusedLocals": true,
-		"noUnusedParameters": true,
-		"noFallthroughCasesInSwitch": true,
-		"noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
 
-		"strict": true,
-		"jsx": "react-jsx",
-		"verbatimModuleSyntax": true,
-		"isolatedModules": true,
-		"noUncheckedSideEffectImports": true,
-		"moduleDetection": "force",
-		"skipLibCheck": true
-	}
+    "strict": true,
+    "jsx": "react-jsx",
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  }
 }

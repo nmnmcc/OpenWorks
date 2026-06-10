@@ -1,20 +1,26 @@
 {
-	"name": "@openworks/backend",
-	"type": "module",
-	"dependencies": {
-		"@casl/ability": "^6.8.1",
-		"@effect/platform-node": "^4.0.0-beta.78",
-		"@effect/sql-pg": "^4.0.0-beta.78",
-		"@nmnmcc/ability": "^0.2.0",
-		"better-auth": "^1.6.15",
-		"drizzle-orm": "1.0.0-rc.3",
-		"effect": "^4.0.0-beta.78",
-		"ioredis": "^5.11.1",
-		"pg": "^8.21.0"
-	},
-	"devDependencies": {
-		"@better-auth/cli": "1.4.21",
-		"@types/pg": "^8",
-		"drizzle-kit": "1.0.0-rc.3"
-	}
+  "name": "@openworks/backend",
+  "type": "module",
+  "exports": {
+    "./api": "./src/services/api/interfaces/index.ts"
+  },
+  "dependencies": {
+    "@casl/ability": "^6.8.1",
+    "@effect/platform-node": "^4.0.0-beta.78",
+    "@effect/sql-pg": "^4.0.0-beta.78",
+    "@nmnmcc/ability": "^0.2.0",
+    "better-auth": "^1.6.15",
+    "drizzle-orm": "1.0.0-rc.3",
+    "effect": "^4.0.0-beta.78",
+    "ioredis": "^5.11.1",
+    "meilisearch": "^0.58.0",
+    "pg": "^8.21.0",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "@better-auth/cli": "1.4.21",
+    "@faker-js/faker": "^10.4.0",
+    "@types/pg": "^8",
+    "drizzle-kit": "1.0.0-rc.3"
+  }
 }
