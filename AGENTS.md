@@ -20,6 +20,7 @@
 - **`database` 始终使用全称**，不简写为 `db`。
 - **`index.ts` 是目录的入口模块，可含实现代码**。不要拆成纯转导出的 `index.ts` + 同名实现文件（如 `api/api.ts` + `api/index.ts`）。同目录内的其他文件不得从本目录的 `index.ts` 导入（防止循环依赖）。
 - **超过三行的三元表达式用 `Match` 代替**。三元嵌套超过三行时，改用 Effect 的 `Match` API。
+- **禁止使用 `switch/case`，一律用 Effect `Match` 代替**。所有基于值的多分支选择统一使用 `Match.value(...).pipe(Match.when(...), ..., Match.orElse(...))` 或 `Match.exhaustive`。
 - **废除只使用一次的函数**。只用过一次的函数直接内联到调用处，只有被多处调用的才有提取成函数的资格。
 - **布尔变量必须使用 `is`/`has`/`should`/`can` 前缀或形容词/过去分词形式**。裸动词+名词（如 `showResults`）读起来像函数调用，应改写为 `shouldShowResults` 或 `resultsVisible`。
 - **优先使用 `export * from "..."` 简化转导出**。barrel 文件（`index.ts` 等）中转导出整个模块的公开 API 时，用 `export * from "./xxx"` 代替逐个列出 `export { A, B, C } from "./xxx"`。仅在需要筛选或重命名导出项时才使用具名转导出。

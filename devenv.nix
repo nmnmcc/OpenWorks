@@ -117,7 +117,7 @@ with pkgs;
           publication:
             name: "openworks_sequin"
             create_if_not_exists: true
-            init_sql: "create publication openworks_sequin for table posts"
+            init_sql: "create publication openworks_sequin for table posts, comments, spaces, users, wiki_pages, works, creators, work_aliases"
 
       sinks:
         - name: "posts-search"
@@ -129,6 +129,76 @@ with pkgs;
             type: "kafka"
             hosts: "127.0.0.1:${toString kafkaPort}"
             topic: "openworks.public.posts"
+            compression: "none"
+        - name: "comments-search"
+          database: "openworks"
+          source:
+            include_tables:
+              - "public.comments"
+          destination:
+            type: "kafka"
+            hosts: "127.0.0.1:${toString kafkaPort}"
+            topic: "openworks.public.comments"
+            compression: "none"
+        - name: "spaces-search"
+          database: "openworks"
+          source:
+            include_tables:
+              - "public.spaces"
+          destination:
+            type: "kafka"
+            hosts: "127.0.0.1:${toString kafkaPort}"
+            topic: "openworks.public.spaces"
+            compression: "none"
+        - name: "users-search"
+          database: "openworks"
+          source:
+            include_tables:
+              - "public.users"
+          destination:
+            type: "kafka"
+            hosts: "127.0.0.1:${toString kafkaPort}"
+            topic: "openworks.public.users"
+            compression: "none"
+        - name: "wiki-pages-search"
+          database: "openworks"
+          source:
+            include_tables:
+              - "public.wiki_pages"
+          destination:
+            type: "kafka"
+            hosts: "127.0.0.1:${toString kafkaPort}"
+            topic: "openworks.public.wiki_pages"
+            compression: "none"
+        - name: "works-search"
+          database: "openworks"
+          source:
+            include_tables:
+              - "public.works"
+          destination:
+            type: "kafka"
+            hosts: "127.0.0.1:${toString kafkaPort}"
+            topic: "openworks.public.works"
+            compression: "none"
+        - name: "creators-search"
+          database: "openworks"
+          source:
+            include_tables:
+              - "public.creators"
+          destination:
+            type: "kafka"
+            hosts: "127.0.0.1:${toString kafkaPort}"
+            topic: "openworks.public.creators"
+            compression: "none"
+        - name: "work-aliases-search"
+          database: "openworks"
+          source:
+            include_tables:
+              - "public.work_aliases"
+          destination:
+            type: "kafka"
+            hosts: "127.0.0.1:${toString kafkaPort}"
+            topic: "openworks.public.work_aliases"
             compression: "none"
       EOF
 

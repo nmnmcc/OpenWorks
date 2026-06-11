@@ -83,16 +83,6 @@ export class Config extends Context.Service<Config>()("@openworks/backend/servic
       }),
       requirementPlatforms: C.succeed<ReadonlyArray<string>>(["windows", "macos", "linux"]),
     }),
-    import: C.all({
-      googleBooksBaseUrl: C.string("GOOGLE_BOOKS_BASE_URL").pipe(
-        C.withDefault("https://www.googleapis.com/books/v1"),
-      ),
-      tmdbBaseUrl: C.string("TMDB_BASE_URL").pipe(C.withDefault("https://api.themoviedb.org/3")),
-      tmdbApiKey: C.option(C.redacted("TMDB_API_KEY")),
-      steamStoreBaseUrl: C.string("STEAM_STORE_BASE_URL").pipe(
-        C.withDefault("https://store.steampowered.com/api"),
-      ),
-    }),
     invitation: C.all({
       tokenBytes: C.number("INVITATION_TOKEN_BYTES").pipe(C.withDefault(32)),
       expiryMs: C.number("INVITATION_EXPIRY_MS").pipe(C.withDefault(7 * 24 * 60 * 60 * 1000)),

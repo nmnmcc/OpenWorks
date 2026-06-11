@@ -94,15 +94,6 @@ export class WorkRatingEntry extends Schema.Class<WorkRatingEntry>("WorkRatingEn
   createdAt: Schema.DateFromString,
 }) {}
 
-export class WorkExternalRefEntry extends Schema.Class<WorkExternalRefEntry>("WorkExternalRefEntry")({
-  id: Schema.String,
-  workId: Schema.String,
-  source: Schema.String,
-  externalId: Schema.String,
-  url: Schema.NullOr(Schema.String),
-  createdAt: Schema.DateFromString,
-}) {}
-
 export class WorkSystemRequirementEntry extends Schema.Class<WorkSystemRequirementEntry>("WorkSystemRequirementEntry")({
   id: Schema.String,
   workId: Schema.String,
@@ -125,34 +116,13 @@ export class WorkSearchResult extends Schema.Class<WorkSearchResult>("WorkSearch
   offset: Schema.Number,
 }) {}
 
-export class WorkImportPreview extends Schema.Class<WorkImportPreview>("WorkImportPreview")({
-  title: Schema.String,
-  originalTitle: Schema.optional(Schema.String),
-  description: Schema.optional(Schema.String),
-  coverUrl: Schema.optional(Schema.String),
-  releaseDate: Schema.optional(Schema.String),
-  type: Schema.String,
-  isbn: Schema.optional(Schema.String),
-  pageCount: Schema.optional(Schema.Number),
-  runtimeMinutes: Schema.optional(Schema.Number),
-  seasonCount: Schema.optional(Schema.Number),
-  episodeCount: Schema.optional(Schema.Number),
-  url: Schema.optional(Schema.String),
-  existingWorkId: Schema.optional(Schema.String),
-  requirements: Schema.optional(
-    Schema.Array(
-      Schema.Struct({
-        platform: Schema.String,
-        tier: Schema.String,
-        notes: Schema.String,
-      }),
-    ),
-  ),
-}) {}
-
 export class WorkNotFound extends Schema.TaggedErrorClass<WorkNotFound>()("WorkNotFound", {}, { httpApiStatus: 404 }) {}
 
-export class WorkForbidden extends Schema.TaggedErrorClass<WorkForbidden>()("WorkForbidden", {}, { httpApiStatus: 403 }) {}
+export class WorkForbidden extends Schema.TaggedErrorClass<WorkForbidden>()(
+  "WorkForbidden",
+  {},
+  { httpApiStatus: 403 },
+) {}
 
 export class InvalidWorkPayload extends Schema.TaggedErrorClass<InvalidWorkPayload>()(
   "InvalidWorkPayload",
@@ -160,7 +130,11 @@ export class InvalidWorkPayload extends Schema.TaggedErrorClass<InvalidWorkPaylo
   { httpApiStatus: 400 },
 ) {}
 
-export class InvalidCredits extends Schema.TaggedErrorClass<InvalidCredits>()("InvalidCredits", {}, { httpApiStatus: 400 }) {}
+export class InvalidCredits extends Schema.TaggedErrorClass<InvalidCredits>()(
+  "InvalidCredits",
+  {},
+  { httpApiStatus: 400 },
+) {}
 
 export class ChapterNotFound extends Schema.TaggedErrorClass<ChapterNotFound>()(
   "ChapterNotFound",
@@ -170,7 +144,11 @@ export class ChapterNotFound extends Schema.TaggedErrorClass<ChapterNotFound>()(
 
 export class TagConflict extends Schema.TaggedErrorClass<TagConflict>()("TagConflict", {}, { httpApiStatus: 409 }) {}
 
-export class AliasConflict extends Schema.TaggedErrorClass<AliasConflict>()("AliasConflict", {}, { httpApiStatus: 409 }) {}
+export class AliasConflict extends Schema.TaggedErrorClass<AliasConflict>()(
+  "AliasConflict",
+  {},
+  { httpApiStatus: 409 },
+) {}
 
 export class WorksGroup extends HttpApiGroup.make("works")
   .add(
@@ -217,13 +195,6 @@ export class WorksGroup extends HttpApiGroup.make("works")
         website: Schema.optional(Schema.String),
         nsfw: Schema.optional(Schema.Boolean),
         targetWorkId: Schema.optional(Schema.String),
-        externalRef: Schema.optional(
-          Schema.Struct({
-            source: Schema.String,
-            externalId: Schema.String,
-            url: Schema.optional(Schema.String),
-          }),
-        ),
       }),
       success: Work,
       error: [InvalidWorkPayload, WorkNotFound, HttpApiError.InternalServerError],
@@ -414,19 +385,6 @@ export class WorksGroup extends HttpApiGroup.make("works")
       ),
       success: Schema.Array(WorkSystemRequirementEntry),
       error: [WorkNotFound, InvalidWorkPayload, HttpApiError.InternalServerError],
-    }),
-    HttpApiEndpoint.get("getExternalRefs", "/:id/external-refs", {
-      params: { id: Schema.String },
-      success: Schema.Array(WorkExternalRefEntry),
-      error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
-    HttpApiEndpoint.get("importPreview", "/import/preview", {
-      query: {
-        source: Schema.String,
-        externalId: Schema.String,
-      },
-      success: WorkImportPreview,
-      error: HttpApiError.InternalServerError,
     }),
   )
   .middleware(AuthMiddleware)

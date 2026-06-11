@@ -413,7 +413,6 @@ export const relations = defineRelations(schema, (r) => ({
     ratings: r.many.workRatings(),
     chapters: r.many.workChapters(),
     libraryItems: r.many.libraryItems(),
-    externalRefs: r.many.workExternalRefs(),
     systemRequirements: r.many.workSystemRequirements(),
     shelfItems: r.many.shelfItems(),
     posts: r.many.posts(),
@@ -538,12 +537,6 @@ export const relations = defineRelations(schema, (r) => ({
     }),
     work: r.one.works({
       from: r.shelfItems.workId,
-      to: r.works.id,
-    }),
-  },
-  workExternalRefs: {
-    work: r.one.works({
-      from: r.workExternalRefs.workId,
       to: r.works.id,
     }),
   },

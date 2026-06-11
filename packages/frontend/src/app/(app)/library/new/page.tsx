@@ -2,7 +2,6 @@
 
 import { Keys } from "@/atoms/keys";
 import { createWorkAtom } from "@/atoms/works";
-import { ImportPanel } from "@/components/library/ImportPanel";
 import { PortableTextEditor } from "@/components/shared/PortableTextEditor";
 import { SimpleSelect } from "@/components/shared/SimpleSelect";
 import { toPortableTextContent } from "@/lib/portable-text";
@@ -22,11 +21,6 @@ const TYPES = ["book", "movie", "tv", "game"] as const;
  * +------------------------------------------+
  * | New Work                                 |
  * | +--------------------------------------+ |
- * | | Import from external source          | |
- * | | [Source v] [ID______________] [Q]    | |
- * | +--------------------------------------+ |
- * |                                          |
- * | +--------------------------------------+ |
  * | | Type      [Book v]                   | |
  * | | Title     [_____________________]    | |
  * | | Orig.     [_____________________]    | |
@@ -44,7 +38,6 @@ const TYPES = ["book", "movie", "tv", "game"] as const;
  * Tablet (640-1023px):
  * +----------------------------------------------------+
  * | New Work                                           |
- * | [ImportPanel]                                      |
  * | +------------------------------------------------+ |
  * | | Type [v]   Title [__________]                  | |
  * | |  ^--- grid-cols-2, fields side by side         | |
@@ -67,13 +60,12 @@ const TYPES = ["book", "movie", "tv", "game"] as const;
  * +----------------------------------------------------------------------+
  *               w-full max-w-4xl mx-auto
  *
- * max-w-4xl 居中容器。顶部 ImportPanel 可预填表单字段。
+ * max-w-4xl 居中容器。
  * 类型 Select 驱动条件字段：book → ISBN/Pages，movie → Runtime，
  * tv → Runtime/Seasons/Episodes，game → Platforms。
  * 表单字段 grid-cols-1 sm:grid-cols-2 窄端单列宽端双列。
  * 简介使用 PortableTextEditor。创建后跳转到作品详情页。
- * 边界：导入预填覆盖已输入值（用户知情——刚点了 Import）。
- *       title 必填，其余可选。
+ * title 必填，其余可选。
  */
 export default function NewWorkPage() {
   const [t] = useT();
@@ -94,19 +86,6 @@ export default function NewWorkPage() {
   const [website, setWebsite] = useState("");
   const [isNsfw, setIsNsfw] = useState(false);
   const [description, setDescription] = useState<ReadonlyArray<unknown> | undefined>(undefined);
-
-  const handleImport = (data: unknown) => {
-    const d = data as Record<string, unknown>;
-    if (d["title"]) setTitle(d["title"] as string);
-    if (d["originalTitle"]) setOriginalTitle(d["originalTitle"] as string);
-    if (d["coverUrl"]) setCoverUrl(d["coverUrl"] as string);
-    if (d["releaseDate"]) setReleaseDate(new Date(d["releaseDate"] as string).toISOString().split("T")[0]!);
-    if (d["isbn"]) setIsbn(d["isbn"] as string);
-    if (d["pageCount"]) setPageCount(String(d["pageCount"]));
-    if (d["runtimeMinutes"]) setRuntimeMinutes(String(d["runtimeMinutes"]));
-    if (d["type"]) setType(d["type"] as "book" | "movie" | "tv" | "game");
-    if (d["description"]) setDescription(d["description"] as ReadonlyArray<unknown>);
-  };
 
   const handleCreate = () => {
     startTransition(async () => {
@@ -135,8 +114,6 @@ export default function NewWorkPage() {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
       <h1 className="text-xl font-semibold">{t.library.newWork}</h1>
-
-      <ImportPanel onImport={handleImport} />
 
       <Card className="flex flex-col gap-4 p-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

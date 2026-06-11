@@ -171,30 +171,23 @@ function CommentItem({ node, postId, postAuthorId, locked, depth = 0 }: CommentI
   }
 
   function handleSelect({ value }: { readonly value: string }) {
-    switch (value) {
-      case "save":
-        return run(() => saveItem({ payload: { commentId: comment.id }, reactivityKeys: [Keys.saved] }), t.post.saved);
-      case "unsave":
-        return run(
-          () => unsaveItem({ query: { commentId: comment.id }, reactivityKeys: [Keys.saved] }),
-          t.post.unsaved,
-        );
-      case "report":
-        setReportOpen(true);
-        return;
-      case "edit":
-        setEditing(true);
-        return;
-      case "delete":
-        setDeleteOpen(true);
-        return;
-      case "remove":
-        return run(() =>
+    Match.value(value).pipe(
+      Match.when("save", () =>
+        run(() => saveItem({ payload: { commentId: comment.id }, reactivityKeys: [Keys.saved] }), t.post.saved),
+      ),
+      Match.when("unsave", () =>
+        run(() => unsaveItem({ query: { commentId: comment.id }, reactivityKeys: [Keys.saved] }), t.post.unsaved),
+      ),
+      Match.when("report", () => setReportOpen(true)),
+      Match.when("edit", () => setEditing(true)),
+      Match.when("delete", () => setDeleteOpen(true)),
+      Match.when("remove", () =>
+        run(() =>
           removeComment({ params: { id: comment.id }, payload: {}, reactivityKeys: [Keys.comments(postId)] }),
-        );
-      default:
-        return;
-    }
+        ),
+      ),
+      Match.orElse(() => {}),
+    );
   }
 
   if (collapsed) {

@@ -463,9 +463,6 @@ const translation = {
     ShelfForbidden: "You are not allowed to manage this shelf.",
     ShelfItemConflict: "Already in this shelf.",
     ShelfWorkNotFound: "Work not found.",
-    ImportNotFound: "No results found for that external ID.",
-    ImportNotConfigured: "Import source not configured.",
-    ImportSourceUnavailable: "Import source is temporarily unavailable.",
   },
   library: {
     title: "Library",
@@ -548,16 +545,6 @@ const translation = {
     tags: "Tags",
     aliases: "Aliases",
     requirements: "System Requirements",
-    externalRefs: "External Links",
-    import: {
-      title: "Import from external source",
-      source: "Source",
-      externalId: "External ID",
-      preview: "Preview",
-      isbn: "ISBN",
-      tmdb: "TMDB",
-      steam: "Steam",
-    },
     requirement: {
       minimum: "Minimum",
       recommended: "Recommended",

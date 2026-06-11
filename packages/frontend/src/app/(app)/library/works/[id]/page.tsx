@@ -2,7 +2,7 @@
 
 import { Keys } from "@/atoms/keys";
 import { workPostsPageQuery } from "@/atoms/posts";
-import { setRatingAtom, workChaptersQuery, workCreditsQuery, workExternalRefsQuery, workQuery, workRequirementsQuery, workTagsQuery, workVariantsQuery } from "@/atoms/works";
+import { setRatingAtom, workChaptersQuery, workCreditsQuery, workQuery, workRequirementsQuery, workTagsQuery, workVariantsQuery } from "@/atoms/works";
 import { SectionBoundary } from "@/components/SectionBoundary";
 import { LibraryStatusControl } from "@/components/library/LibraryStatusControl";
 import { RatingStars } from "@/components/library/RatingStars";
@@ -151,10 +151,6 @@ function OverviewTab({ id }: { readonly id: string }) {
         </div>
       </Card>
 
-      <SectionBoundary>
-        <ExternalRefsSection workId={id} />
-      </SectionBoundary>
-
       {work.type === "game" && (
         <SectionBoundary>
           <RequirementsSection workId={id} />
@@ -188,40 +184,6 @@ function CreditsSection({ workId }: { readonly workId: string }) {
             {credit.characterName && <span className="text-muted-foreground">as {credit.characterName}</span>}
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function ExternalRefsSection({ workId }: { readonly workId: string }) {
-  const [t] = useT();
-  const result = useAtomSuspense(workExternalRefsQuery(workId));
-  if (result.value.length === 0) return null;
-
-  return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-medium">{t.library.externalRefs}</h3>
-      <div className="flex flex-wrap gap-2">
-        {result.value.map((ref) =>
-          ref.url ? (
-            <a
-              className="text-info-foreground flex items-center gap-1 text-sm hover:underline"
-              href={ref.url}
-              key={ref.id}
-              rel="noreferrer noopener"
-              target="_blank"
-            >
-              <Badge variant="outline">{ref.source.toUpperCase()}</Badge>
-              <span className="min-w-0 truncate">{ref.externalId}</span>
-              <ExternalLinkIcon className="size-3 shrink-0" />
-            </a>
-          ) : (
-            <div className="flex items-center gap-1 text-sm" key={ref.id}>
-              <Badge variant="outline">{ref.source.toUpperCase()}</Badge>
-              <span className="min-w-0 truncate">{ref.externalId}</span>
-            </div>
-          ),
-        )}
       </div>
     </div>
   );

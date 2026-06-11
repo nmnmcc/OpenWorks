@@ -559,11 +559,6 @@ export const makeSeedData = Effect.gen(function* () {
   };
   const reviewPosts = [reviewPost];
 
-  const workExternalRefs = [
-    { id: v7(), workId: workBook.id, source: "isbn", externalId: "9780765326355", url: null },
-    { id: v7(), workId: workGame.id, source: "steam", externalId: "620", url: "https://store.steampowered.com/app/620" },
-  ];
-
   const workSystemRequirements = [
     {
       id: v7(),
@@ -616,7 +611,6 @@ export const makeSeedData = Effect.gen(function* () {
     shelves,
     shelfItems,
     reviewPosts,
-    workExternalRefs,
     workSystemRequirements,
   };
 });
@@ -628,7 +622,6 @@ const deleteAllTables = (database: typeof Database.Service) =>
     yield* database.delete(schema.chapterProgress);
     yield* database.delete(schema.libraryItems);
     yield* database.delete(schema.workSystemRequirements);
-    yield* database.delete(schema.workExternalRefs);
     yield* database.delete(schema.workRatings);
     yield* database.delete(schema.workTagApplications);
     yield* database.delete(schema.workTags);
@@ -689,7 +682,6 @@ export const runSeed = (database: typeof Database.Service, clean: boolean) =>
     yield* database.insert(schema.comments).values(data.comments);
     yield* database.insert(schema.votes).values(data.votes);
     yield* database.insert(schema.spaceBans).values(data.spaceBans);
-    yield* database.insert(schema.workExternalRefs).values(data.workExternalRefs);
     yield* database.insert(schema.workSystemRequirements).values(data.workSystemRequirements);
 
     yield* Console.log(

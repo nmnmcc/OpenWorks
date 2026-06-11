@@ -87,17 +87,6 @@ export const workRequirementsQuery = (id: string) =>
     reactivityKeys: [Keys.workRequirements(id)],
   });
 
-export const workExternalRefsQuery = (id: string) =>
-  ApiClient.query("works", "getExternalRefs", {
-    params: { id },
-    reactivityKeys: [Keys.workExternalRefs(id)],
-  });
-
-export const importPreviewQuery = (source: string, externalId: string) =>
-  ApiClient.query("works", "importPreview", {
-    query: { source, externalId },
-  });
-
 export const tagsAutocompleteQuery = (q: string) =>
   ApiClient.query("works", "searchTags", {
     query: { q, limit: 10 },

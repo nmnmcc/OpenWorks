@@ -17,24 +17,19 @@ import { showApiError } from "@/lib/errors";
 import type { Translation } from "@/lib/i18n";
 import { useT } from "@/lib/i18n/locale";
 import { useAtomSet } from "@effect/atom-react";
+import { Match } from "effect";
 import { CopyIcon, PlusIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-function statusLabel(t: Translation, status: string): string {
-  switch (status) {
-    case "pending":
-      return t.mod.invitations.statusPending;
-    case "accepted":
-      return t.mod.invitations.statusAccepted;
-    case "revoked":
-      return t.mod.invitations.statusRevoked;
-    case "expired":
-      return t.mod.invitations.statusExpired;
-    default:
-      return status;
-  }
-}
+const statusLabel = (t: Translation, status: string): string =>
+  Match.value(status).pipe(
+    Match.when("pending", () => t.mod.invitations.statusPending),
+    Match.when("accepted", () => t.mod.invitations.statusAccepted),
+    Match.when("revoked", () => t.mod.invitations.statusRevoked),
+    Match.when("expired", () => t.mod.invitations.statusExpired),
+    Match.orElse(() => status),
+  );
 
 function InviteDialog({ spaceId }: { readonly spaceId: string }) {
   const [t] = useT();

@@ -465,9 +465,6 @@ export default {
     ShelfForbidden: "你没有权限管理该书架。",
     ShelfItemConflict: "已在该书架中。",
     ShelfWorkNotFound: "作品不存在。",
-    ImportNotFound: "未找到该外部 ID 对应的结果。",
-    ImportNotConfigured: "导入源未配置。",
-    ImportSourceUnavailable: "导入源暂不可用。",
   },
   library: {
     title: "作品库",
@@ -550,16 +547,6 @@ export default {
     tags: "标签",
     aliases: "别名",
     requirements: "配置需求",
-    externalRefs: "外部链接",
-    import: {
-      title: "从外部来源导入",
-      source: "来源",
-      externalId: "外部 ID",
-      preview: "预览",
-      isbn: "ISBN",
-      tmdb: "TMDB",
-      steam: "Steam",
-    },
     requirement: {
       minimum: "最低",
       recommended: "推荐",

@@ -465,9 +465,6 @@ export default {
     ShelfForbidden: "你沒有權限管理該書架。",
     ShelfItemConflict: "已在該書架中。",
     ShelfWorkNotFound: "作品不存在。",
-    ImportNotFound: "未找到該外部 ID 對應的結果。",
-    ImportNotConfigured: "匯入來源未設定。",
-    ImportSourceUnavailable: "匯入來源暫不可用。",
   },
   library: {
     title: "作品庫",
@@ -550,16 +547,6 @@ export default {
     tags: "標籤",
     aliases: "別名",
     requirements: "系統需求",
-    externalRefs: "外部連結",
-    import: {
-      title: "從外部來源匯入",
-      source: "來源",
-      externalId: "外部 ID",
-      preview: "預覽",
-      isbn: "ISBN",
-      tmdb: "TMDB",
-      steam: "Steam",
-    },
     requirement: {
       minimum: "最低",
       recommended: "建議",

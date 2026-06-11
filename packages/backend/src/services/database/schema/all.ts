@@ -21,5 +21,4 @@ export * from "./work-rating";
 export * from "./work-chapter";
 export * from "./library-item";
 export * from "./shelf";
-export * from "./work-external-ref";
 export * from "./work-system-requirement";

@@ -21,6 +21,7 @@ import { authClient } from "@/lib/auth-client";
 import { showApiError } from "@/lib/errors";
 import { useT } from "@/lib/i18n/locale";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Match } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import type { Post } from "@openworks/backend/api";
 import { MoreHorizontalIcon } from "lucide-react";
@@ -99,43 +100,34 @@ export function PostActionsMenu({ post, onEdit, onDeleted }: PostActionsMenuProp
   }
 
   function handleSelect({ value }: { readonly value: string }) {
-    switch (value) {
-      case "save":
-        return run(() => saveItem({ payload: { postId: post.id }, reactivityKeys: [Keys.saved] }), t.post.saved);
-      case "unsave":
-        return run(
-          () => unsaveItem({ query: { postId: post.id }, reactivityKeys: [Keys.saved] }),
-          t.post.unsaved,
-        );
-      case "hide":
-        return run(
+    Match.value(value).pipe(
+      Match.when("save", () =>
+        run(() => saveItem({ payload: { postId: post.id }, reactivityKeys: [Keys.saved] }), t.post.saved),
+      ),
+      Match.when("unsave", () =>
+        run(() => unsaveItem({ query: { postId: post.id }, reactivityKeys: [Keys.saved] }), t.post.unsaved),
+      ),
+      Match.when("hide", () =>
+        run(
           () => hidePost({ payload: { postId: post.id }, reactivityKeys: [Keys.hidden, Keys.posts] }),
           t.post.hiddenToast,
-        );
-      case "unhide":
-        return run(() => unhidePost({ query: { postId: post.id }, reactivityKeys: [Keys.hidden, Keys.posts] }));
-      case "report":
-        setReportOpen(true);
-        return;
-      case "edit":
-        onEdit?.();
-        return;
-      case "delete":
-        setDeleteOpen(true);
-        return;
-      case "pin":
-        return run(() => pinPost({ params: { id: post.id }, reactivityKeys: postKeys }));
-      case "unpin":
-        return run(() => unpinPost({ params: { id: post.id }, reactivityKeys: postKeys }));
-      case "lock":
-        return run(() => lockPost({ params: { id: post.id }, reactivityKeys: postKeys }));
-      case "unlock":
-        return run(() => unlockPost({ params: { id: post.id }, reactivityKeys: postKeys }));
-      case "remove":
-        return run(() => removePost({ params: { id: post.id }, payload: {}, reactivityKeys: postKeys }));
-      default:
-        return;
-    }
+        ),
+      ),
+      Match.when("unhide", () =>
+        run(() => unhidePost({ query: { postId: post.id }, reactivityKeys: [Keys.hidden, Keys.posts] })),
+      ),
+      Match.when("report", () => setReportOpen(true)),
+      Match.when("edit", () => onEdit?.()),
+      Match.when("delete", () => setDeleteOpen(true)),
+      Match.when("pin", () => run(() => pinPost({ params: { id: post.id }, reactivityKeys: postKeys }))),
+      Match.when("unpin", () => run(() => unpinPost({ params: { id: post.id }, reactivityKeys: postKeys }))),
+      Match.when("lock", () => run(() => lockPost({ params: { id: post.id }, reactivityKeys: postKeys }))),
+      Match.when("unlock", () => run(() => unlockPost({ params: { id: post.id }, reactivityKeys: postKeys }))),
+      Match.when("remove", () =>
+        run(() => removePost({ params: { id: post.id }, payload: {}, reactivityKeys: postKeys })),
+      ),
+      Match.orElse(() => {}),
+    );
   }
 
   return (

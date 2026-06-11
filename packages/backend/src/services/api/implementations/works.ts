@@ -8,14 +8,12 @@ import { Database } from "../../database";
 import { workCredits } from "../../database/schema/creator";
 import { libraryItems } from "../../database/schema/library-item";
 import { notifications } from "../../database/schema/notification";
-import { works, workRevisions } from "../../database/schema/work";
+import { workRevisions, works } from "../../database/schema/work";
 import { workAliases } from "../../database/schema/work-alias";
 import { chapterProgress, workChapters } from "../../database/schema/work-chapter";
-import { workExternalRefs } from "../../database/schema/work-external-ref";
 import { workRatings } from "../../database/schema/work-rating";
 import { workSystemRequirements } from "../../database/schema/work-system-requirement";
 import { workTagApplications, workTags } from "../../database/schema/work-tag";
-import { ExternalImport } from "../../import";
 import { Search } from "../../search";
 import { Api } from "../interfaces";
 import { CurrentUser } from "../interfaces/middlewares/auth";
@@ -30,9 +28,7 @@ import {
   WorkChapterDetail,
   WorkChapterEntry,
   WorkCreditEntry,
-  WorkExternalRefEntry,
   WorkForbidden,
-  WorkImportPreview,
   WorkNotFound,
   WorkRatingEntry,
   WorkRevisionEntry,
@@ -48,8 +44,6 @@ export const WorksHandlers = HttpApiBuilder.group(
     const config = yield* Config;
     const database = yield* Database;
     const search = yield* Search;
-    const externalImport = yield* ExternalImport;
-
     return handlers
       .handle("list", ({ query }) =>
         Effect.gen(function* () {
@@ -191,16 +185,6 @@ export const WorksHandlers = HttpApiBuilder.group(
             })
             .returning();
 
-          if (payload.externalRef) {
-            yield* database.insert(workExternalRefs).values({
-              id: v7(),
-              workId: id,
-              source: payload.externalRef.source,
-              externalId: payload.externalRef.externalId,
-              url: payload.externalRef.url,
-            });
-          }
-
           return new Work(row!);
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
       )
@@ -249,7 +233,12 @@ export const WorksHandlers = HttpApiBuilder.group(
               runtimeMinutes: payload.runtimeMinutes,
               seasonCount: payload.seasonCount,
               episodeCount: payload.episodeCount,
-              platforms: payload.platforms !== undefined ? (payload.platforms !== null ? [...payload.platforms] : null) : undefined,
+              platforms:
+                payload.platforms !== undefined
+                  ? payload.platforms !== null
+                    ? [...payload.platforms]
+                    : null
+                  : undefined,
               website: payload.website,
               nsfw: payload.nsfw,
             })
@@ -262,7 +251,7 @@ export const WorksHandlers = HttpApiBuilder.group(
               userId: existing.createdById,
               type: "work_edited",
               title: `Your work "${existing.title}" was edited`,
-              linkUrl: `/works/${params.id}`,
+              linkUrl: `/library/works/${params.id}`,
             });
           }
 
@@ -880,66 +869,5 @@ export const WorksHandlers = HttpApiBuilder.group(
           return rows.map((row) => new WorkSystemRequirementEntry(row));
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
       )
-      .handle("getExternalRefs", ({ params }) =>
-        Effect.gen(function* () {
-          const existing = yield* database.query.works.findFirst({
-            where: { id: params.id },
-          });
-          if (!existing) {
-            return yield* new WorkNotFound();
-          }
-          const rows = yield* database.query.workExternalRefs.findMany({
-            where: { workId: params.id },
-          });
-          return rows.map((row) => new WorkExternalRefEntry(row));
-        }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
-      )
-      .handle("importPreview", ({ query }) =>
-        Effect.gen(function* () {
-          const existingRef = yield* database.query.workExternalRefs.findFirst({
-            where: { source: query.source, externalId: query.externalId },
-          });
-
-          if (query.source === "google_books") {
-            const data = yield* externalImport.lookupGoogleBooks(query.externalId);
-            return new WorkImportPreview({
-              ...data,
-              existingWorkId: existingRef?.workId,
-            });
-          }
-
-          if (query.source === "tmdb_movie") {
-            const data = yield* externalImport.lookupTmdb("movie", query.externalId);
-            return new WorkImportPreview({
-              ...data,
-              existingWorkId: existingRef?.workId,
-            });
-          }
-
-          if (query.source === "tmdb_tv") {
-            const data = yield* externalImport.lookupTmdb("tv", query.externalId);
-            return new WorkImportPreview({
-              ...data,
-              existingWorkId: existingRef?.workId,
-            });
-          }
-
-          if (query.source === "steam") {
-            const result = yield* externalImport.lookupSteam(query.externalId);
-            return new WorkImportPreview({
-              ...result.preview,
-              requirements: result.requirements.length > 0 ? [...result.requirements] : undefined,
-              existingWorkId: existingRef?.workId,
-            });
-          }
-
-          return yield* new HttpApiError.InternalServerError();
-        }).pipe(
-          Effect.catchTag("ImportNotFound", () => new HttpApiError.InternalServerError()),
-          Effect.catchTag("ImportNotConfigured", () => new HttpApiError.InternalServerError()),
-          Effect.catchTag("ImportSourceUnavailable", () => new HttpApiError.InternalServerError()),
-          Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),
-        ),
-      );
   }),
 );

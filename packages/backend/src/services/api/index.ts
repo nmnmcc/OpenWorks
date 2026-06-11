@@ -6,7 +6,6 @@ import { Auth } from "../auth";
 import { Authorization } from "../authorization";
 import { Config } from "../config";
 import { Database, DatabasePool } from "../database";
-import { ExternalImport } from "../import";
 import { Search } from "../search";
 import { CommentsHandlers } from "./implementations/comments";
 import { CreatorsHandlers } from "./implementations/creators";
@@ -144,7 +143,6 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
     WorksHandlers.pipe(
       Layer.provide(AuthMiddlewareLive),
       Layer.provide(Auth.layer),
-      Layer.provide(ExternalImport.layer),
       Layer.provide(Search.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
