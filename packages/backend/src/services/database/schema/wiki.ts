@@ -1,22 +1,24 @@
-import { pgTable, text, uuid, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { v7 } from "uuid";
+
+import type { PortableTextContent } from "../../../libraries/portable-text";
 import { users } from "./auth";
-import { groups } from "./group";
+import { spaces } from "./space";
 
 /**
- * 群组 wiki 页面，content 始终保存当前最新内容（历史版本见 wikiRevisions）。
- * slug 在群组内唯一，构成页面 URL。
+ * 空间 wiki 页面，content 始终保存当前最新内容（历史版本见 wikiRevisions）。
+ * slug 在空间内唯一，构成页面 URL。
  */
 export const wikiPages = pgTable(
   "wiki_pages",
   {
     id: uuid("id").primaryKey().$defaultFn(v7),
-    groupId: uuid("group_id")
+    spaceId: uuid("space_id")
       .notNull()
-      .references(() => groups.id, { onDelete: "cascade" }),
+      .references(() => spaces.id, { onDelete: "cascade" }),
     slug: text("slug").notNull(),
     title: text("title").notNull(),
-    content: text("content").notNull(),
+    content: jsonb("content").$type<PortableTextContent>().notNull(),
     lastEditedById: uuid("last_edited_by_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -27,8 +29,8 @@ export const wikiPages = pgTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex("wiki_pages_groupId_slug_idx").on(table.groupId, table.slug),
-    index("wiki_pages_groupId_idx").on(table.groupId),
+    uniqueIndex("wiki_pages_spaceId_slug_idx").on(table.spaceId, table.slug),
+    index("wiki_pages_spaceId_idx").on(table.spaceId),
   ],
 );
 
@@ -43,7 +45,7 @@ export const wikiRevisions = pgTable(
     pageId: uuid("page_id")
       .notNull()
       .references(() => wikiPages.id, { onDelete: "cascade" }),
-    content: text("content").notNull(),
+    content: jsonb("content").$type<PortableTextContent>().notNull(),
     editedById: uuid("edited_by_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

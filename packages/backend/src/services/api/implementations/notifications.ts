@@ -1,23 +1,32 @@
+import { and, count, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq, and, count } from "drizzle-orm";
-import { Api, NotificationEntry, NotificationNotFound, CurrentUser } from "../interfaces";
+
+import { Config } from "../../config";
 import { Database } from "../../database";
-import { notifications } from "../../database/schema";
+import { notifications } from "../../database/schema/notification";
+import { Api } from "../interfaces";
+import { CurrentUser } from "../interfaces/middlewares/auth";
+import { NotificationEntry, NotificationNotFound } from "../interfaces/notifications";
 
 export const NotificationsHandlers = HttpApiBuilder.group(
   Api,
   "notifications",
   Effect.fn(function* (handlers) {
+    const config = yield* Config;
     const database = yield* Database;
 
     return handlers
-      .handle("list", () =>
+      .handle("list", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
+          const offset = query.offset ?? 0;
           const rows = yield* database.query.notifications.findMany({
             where: { userId: user.id },
             orderBy: { createdAt: "desc" },
+            limit,
+            offset,
           });
           return rows.map((row) => new NotificationEntry(row));
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),

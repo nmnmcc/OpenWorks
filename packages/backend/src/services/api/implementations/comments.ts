@@ -1,28 +1,99 @@
-import { v7 } from "uuid";
+import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq, sql } from "drizzle-orm";
+import { v7 } from "uuid";
+
+import { Authorization } from "../../authorization";
+import { Config } from "../../config";
+import { Database } from "../../database";
+import { comments } from "../../database/schema/comment";
+import { modLog } from "../../database/schema/moderation-log";
+import { notifications } from "../../database/schema/notification";
+import { posts } from "../../database/schema/post";
+import { Search } from "../../search";
+import { Api } from "../interfaces";
 import {
-  Api,
   Comment,
-  CommentNotFound,
   CommentForbidden,
+  CommentNotFound,
+  CommentSearchResult,
   CommentTargetNotFound,
   PostLocked,
-  CurrentUser,
-} from "../interfaces";
-import { Database } from "../../database";
-import { Authorization } from "../../authorization";
-import { comments, posts, notifications, modLog } from "../../database/schema";
+} from "../interfaces/comments";
+import { CurrentUser } from "../interfaces/middlewares/auth";
 
 export const CommentsHandlers = HttpApiBuilder.group(
   Api,
   "comments",
   Effect.fn(function* (handlers) {
+    const config = yield* Config;
     const database = yield* Database;
     const authorization = yield* Authorization;
+    const search = yield* Search;
 
     return handlers
+      .handle("search", ({ query }) =>
+        Effect.gen(function* () {
+          const user = yield* CurrentUser;
+          const limit = query.limit ?? config.pagination.searchDefaultLimit;
+          const offset = query.offset ?? 0;
+
+          const result = yield* search.searchComments({
+            q: query.q,
+            postId: query.postId,
+            spaceId: query.spaceId,
+            limit,
+            offset,
+          });
+
+          const ids = result.hits.map((hit) => hit.id);
+
+          if (ids.length === 0) {
+            return new CommentSearchResult({
+              hits: [],
+              query: result.query,
+              estimatedTotalHits: result.estimatedTotalHits ?? 0,
+              processingTimeMs: result.processingTimeMs,
+              limit,
+              offset,
+            });
+          }
+
+          const rows = yield* database.query.comments.findMany({
+            where: {
+              id: { in: ids },
+              removed: false,
+              OR: [
+                { spaceId: { isNull: true } },
+                {
+                  space: {
+                    visibility: { ne: "private" },
+                  },
+                },
+                { space: { members: { userId: user.id } } },
+              ],
+            },
+          });
+
+          const rowMap = new Map(rows.map((row) => [row.id, row]));
+          const hits = ids
+            .map((id) => rowMap.get(id))
+            .filter((row): row is (typeof rows)[number] => row !== undefined)
+            .map((row) => new Comment(row));
+
+          return new CommentSearchResult({
+            hits,
+            query: result.query,
+            estimatedTotalHits: result.estimatedTotalHits ?? 0,
+            processingTimeMs: result.processingTimeMs,
+            limit,
+            offset,
+          });
+        }).pipe(
+          Effect.catchTag("UnknownError", () => new HttpApiError.InternalServerError()),
+          Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),
+        ),
+      )
       .handle("list", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
@@ -30,13 +101,13 @@ export const CommentsHandlers = HttpApiBuilder.group(
             where: {
               postId: query.postId,
               OR: [
-                { groupId: { isNull: true } },
+                { spaceId: { isNull: true } },
                 {
-                  group: {
+                  space: {
                     visibility: { ne: "private" },
                   },
                 },
-                { group: { members: { userId: user.id } } },
+                { space: { members: { userId: user.id } } },
               ],
             },
             orderBy: { createdAt: "asc" },
@@ -53,14 +124,14 @@ export const CommentsHandlers = HttpApiBuilder.group(
           if (!row) {
             return yield* new CommentNotFound();
           }
-          if (row.groupId) {
-            const group = yield* database.query.groups.findFirst({
-              where: { id: row.groupId },
+          if (row.spaceId) {
+            const space = yield* database.query.spaces.findFirst({
+              where: { id: row.spaceId },
             });
-            if (group && group.visibility === "private") {
-              const membership = yield* database.query.groupMembers.findFirst({
+            if (space && space.visibility === "private") {
+              const membership = yield* database.query.spaceMembers.findFirst({
                 where: {
-                  groupId: group.id,
+                  spaceId: space.id,
                   userId: user.id,
                 },
               });
@@ -96,14 +167,14 @@ export const CommentsHandlers = HttpApiBuilder.group(
             return yield* new CommentTargetNotFound();
           }
 
-          if (post.groupId) {
-            yield* authorization.check(user.id, post.groupId, {
+          if (post.spaceId) {
+            yield* authorization.check(user.id, post.spaceId, {
               action: "create",
               subject: "Comment",
             });
-            const mute = yield* database.query.groupMutes.findFirst({
+            const mute = yield* database.query.spaceMutes.findFirst({
               where: {
-                groupId: post.groupId,
+                spaceId: post.spaceId,
                 userId: user.id,
               },
             });
@@ -120,7 +191,7 @@ export const CommentsHandlers = HttpApiBuilder.group(
               authorId: user.id,
               postId: payload.postId,
               parentId: payload.parentId,
-              groupId: post.groupId,
+              spaceId: post.spaceId,
             })
             .returning();
 
@@ -163,14 +234,14 @@ export const CommentsHandlers = HttpApiBuilder.group(
             return yield* new CommentNotFound();
           }
 
-          if (existing.groupId) {
+          if (existing.spaceId) {
             if (existing.authorId === user.id) {
-              yield* authorization.check(user.id, existing.groupId, {
+              yield* authorization.check(user.id, existing.spaceId, {
                 action: "update",
                 subject: "Comment",
               });
             } else {
-              yield* authorization.check(user.id, existing.groupId, {
+              yield* authorization.check(user.id, existing.spaceId, {
                 action: "manage",
                 subject: "Comment",
               });
@@ -205,14 +276,14 @@ export const CommentsHandlers = HttpApiBuilder.group(
             return yield* new CommentNotFound();
           }
 
-          if (existing.groupId) {
+          if (existing.spaceId) {
             if (existing.authorId === user.id) {
-              yield* authorization.check(user.id, existing.groupId, {
+              yield* authorization.check(user.id, existing.spaceId, {
                 action: "delete",
                 subject: "Comment",
               });
             } else {
-              yield* authorization.check(user.id, existing.groupId, {
+              yield* authorization.check(user.id, existing.spaceId, {
                 action: "manage",
                 subject: "Comment",
               });
@@ -259,10 +330,10 @@ export const CommentsHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new CommentNotFound();
           }
-          if (!existing.groupId) {
+          if (!existing.spaceId) {
             return yield* new CommentForbidden();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
             subject: "Comment",
           });
@@ -277,7 +348,7 @@ export const CommentsHandlers = HttpApiBuilder.group(
             .returning();
           yield* database.insert(modLog).values({
             id: v7(),
-            groupId: existing.groupId,
+            spaceId: existing.spaceId,
             moderatorId: user.id,
             action: "comment_remove",
             targetType: "comment",

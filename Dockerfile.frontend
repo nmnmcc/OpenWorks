@@ -1,0 +1,27 @@
+FROM node:24-slim AS deps
+WORKDIR /app
+RUN corepack enable
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY packages/backend/package.json ./packages/backend/
+COPY packages/frontend/package.json ./packages/frontend/
+RUN yarn workspaces focus @openworks/frontend
+
+FROM node:24-slim AS builder
+WORKDIR /app
+RUN corepack enable
+COPY --from=deps /app ./
+COPY packages/backend ./packages/backend
+COPY packages/frontend ./packages/frontend
+COPY tsconfig.base.json ./
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN yarn workspace @openworks/frontend run next build
+
+FROM node:24-slim
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=builder /app/packages/frontend/.next/standalone ./
+COPY --from=builder /app/packages/frontend/.next/static ./packages/frontend/.next/static
+COPY --from=builder /app/packages/frontend/public ./packages/frontend/public
+EXPOSE 3000
+CMD ["node", "packages/frontend/server.js"]

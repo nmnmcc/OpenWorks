@@ -1,10 +1,11 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/unstable/httpapi";
+
 import { AuthMiddleware } from "./middlewares/auth";
 
 export class ReportEntry extends Schema.Class<ReportEntry>("ReportEntry")({
   id: Schema.String,
-  groupId: Schema.String,
+  spaceId: Schema.String,
   reporterId: Schema.String,
   postId: Schema.NullOr(Schema.String),
   commentId: Schema.NullOr(Schema.String),
@@ -47,8 +48,10 @@ export class ReportsGroup extends HttpApiGroup.make("reports")
     }),
     HttpApiEndpoint.get("list", "/", {
       query: {
-        groupId: Schema.String,
+        spaceId: Schema.String,
         status: Schema.optional(Schema.String),
+        limit: Schema.optional(Schema.NumberFromString),
+        offset: Schema.optional(Schema.NumberFromString),
       },
       success: Schema.Array(ReportEntry),
       error: [ReportForbidden, HttpApiError.InternalServerError],

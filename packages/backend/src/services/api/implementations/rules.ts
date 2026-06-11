@@ -1,11 +1,14 @@
-import { v7 } from "uuid";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq } from "drizzle-orm";
-import { Api, GroupRuleEntry, RuleNotFound, RuleForbidden, CurrentUser } from "../interfaces";
-import { Database } from "../../database";
+import { v7 } from "uuid";
+
 import { Authorization } from "../../authorization";
-import { groupRules } from "../../database/schema";
+import { Database } from "../../database";
+import { spaceRules } from "../../database/schema/space-rule";
+import { Api } from "../interfaces";
+import { CurrentUser } from "../interfaces/middlewares/auth";
+import { RuleForbidden, RuleNotFound, SpaceRuleEntry } from "../interfaces/rules";
 
 export const RulesHandlers = HttpApiBuilder.group(
   Api,
@@ -18,13 +21,13 @@ export const RulesHandlers = HttpApiBuilder.group(
       .handle("list", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          const group = yield* database.query.groups.findFirst({
-            where: { id: query.groupId },
+          const space = yield* database.query.spaces.findFirst({
+            where: { id: query.spaceId },
           });
-          if (group && group.visibility === "private") {
-            const membership = yield* database.query.groupMembers.findFirst({
+          if (space && space.visibility === "private") {
+            const membership = yield* database.query.spaceMembers.findFirst({
               where: {
-                groupId: query.groupId,
+                spaceId: query.spaceId,
                 userId: user.id,
               },
             });
@@ -32,31 +35,31 @@ export const RulesHandlers = HttpApiBuilder.group(
               return yield* new RuleForbidden();
             }
           }
-          const rows = yield* database.query.groupRules.findMany({
-            where: { groupId: query.groupId },
+          const rows = yield* database.query.spaceRules.findMany({
+            where: { spaceId: query.spaceId },
             orderBy: { position: "asc" },
           });
-          return rows.map((row) => new GroupRuleEntry(row));
+          return rows.map((row) => new SpaceRuleEntry(row));
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
       )
       .handle("create", ({ payload }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          yield* authorization.check(user.id, payload.groupId, {
+          yield* authorization.check(user.id, payload.spaceId, {
             action: "manage",
-            subject: "GroupRule",
+            subject: "SpaceRule",
           });
           const [row] = yield* database
-            .insert(groupRules)
+            .insert(spaceRules)
             .values({
               id: v7(),
-              groupId: payload.groupId,
+              spaceId: payload.spaceId,
               title: payload.title,
               description: payload.description,
               position: payload.position ?? 0,
             })
             .returning();
-          return new GroupRuleEntry(row!);
+          return new SpaceRuleEntry(row!);
         }).pipe(
           Effect.catchTag("AuthorizationError", () => new RuleForbidden()),
           Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),
@@ -69,26 +72,26 @@ export const RulesHandlers = HttpApiBuilder.group(
       .handle("update", ({ params, payload }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          const existing = yield* database.query.groupRules.findFirst({
+          const existing = yield* database.query.spaceRules.findFirst({
             where: { id: params.id },
           });
           if (!existing) {
             return yield* new RuleNotFound();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
-            subject: "GroupRule",
+            subject: "SpaceRule",
           });
           const [row] = yield* database
-            .update(groupRules)
+            .update(spaceRules)
             .set({
               title: payload.title,
               description: payload.description,
               position: payload.position,
             })
-            .where(eq(groupRules.id, params.id))
+            .where(eq(spaceRules.id, params.id))
             .returning();
-          return new GroupRuleEntry(row!);
+          return new SpaceRuleEntry(row!);
         }).pipe(
           Effect.catchTag("AuthorizationError", () => new RuleForbidden()),
           Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),
@@ -101,17 +104,17 @@ export const RulesHandlers = HttpApiBuilder.group(
       .handle("delete", ({ params }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          const existing = yield* database.query.groupRules.findFirst({
+          const existing = yield* database.query.spaceRules.findFirst({
             where: { id: params.id },
           });
           if (!existing) {
             return yield* new RuleNotFound();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
-            subject: "GroupRule",
+            subject: "SpaceRule",
           });
-          yield* database.delete(groupRules).where(eq(groupRules.id, params.id));
+          yield* database.delete(spaceRules).where(eq(spaceRules.id, params.id));
         }).pipe(
           Effect.catchTag("AuthorizationError", () => new RuleForbidden()),
           Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),

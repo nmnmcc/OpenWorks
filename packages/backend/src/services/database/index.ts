@@ -1,12 +1,12 @@
+import { PgClient } from "@effect/sql-pg";
 import * as EffectPostgres from "drizzle-orm/effect-postgres";
 import { Context, Effect, Layer, Redacted } from "effect";
 import { Reactivity } from "effect/unstable/reactivity";
-import { Config } from "../config";
-import { PgClient } from "@effect/sql-pg";
 import { Pool } from "pg";
 
-import type * as schema from "./schema";
+import { Config } from "../config";
 import { relations } from "./relations";
+import type * as schema from "./schema/all";
 
 export type Schema = typeof schema;
 export type Relations = typeof relations;

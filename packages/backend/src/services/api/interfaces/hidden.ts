@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
+
 import { AuthMiddleware } from "./middlewares/auth";
 
 export class HiddenPostEntry extends Schema.Class<HiddenPostEntry>("HiddenPostEntry")({
@@ -18,6 +19,11 @@ export class HiddenTargetNotFound extends Schema.TaggedErrorClass<HiddenTargetNo
 export class HiddenGroup extends HttpApiGroup.make("hidden")
   .add(
     HttpApiEndpoint.get("list", "/", {
+      query: {
+        postId: Schema.optional(Schema.String),
+        limit: Schema.optional(Schema.NumberFromString),
+        offset: Schema.optional(Schema.NumberFromString),
+      },
       success: Schema.Array(HiddenPostEntry),
       error: HttpApiError.InternalServerError,
     }),
@@ -28,8 +34,10 @@ export class HiddenGroup extends HttpApiGroup.make("hidden")
       success: HiddenPostEntry,
       error: [HiddenTargetNotFound, HttpApiError.InternalServerError],
     }),
-    HttpApiEndpoint.delete("unhide", "/:id", {
-      params: { id: Schema.String },
+    HttpApiEndpoint.delete("unhide", "/", {
+      query: {
+        postId: Schema.String,
+      },
       success: HttpApiSchema.NoContent,
       error: HttpApiError.InternalServerError,
     }),

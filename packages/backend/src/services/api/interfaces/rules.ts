@@ -1,10 +1,11 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
+
 import { AuthMiddleware } from "./middlewares/auth";
 
-export class GroupRuleEntry extends Schema.Class<GroupRuleEntry>("GroupRuleEntry")({
+export class SpaceRuleEntry extends Schema.Class<SpaceRuleEntry>("SpaceRuleEntry")({
   id: Schema.String,
-  groupId: Schema.String,
+  spaceId: Schema.String,
   title: Schema.String,
   description: Schema.NullOr(Schema.String),
   position: Schema.Number,
@@ -24,19 +25,19 @@ export class RulesGroup extends HttpApiGroup.make("rules")
   .add(
     HttpApiEndpoint.get("list", "/", {
       query: {
-        groupId: Schema.String,
+        spaceId: Schema.String,
       },
-      success: Schema.Array(GroupRuleEntry),
+      success: Schema.Array(SpaceRuleEntry),
       error: [RuleForbidden, HttpApiError.InternalServerError],
     }),
     HttpApiEndpoint.post("create", "/", {
       payload: Schema.Struct({
-        groupId: Schema.String,
+        spaceId: Schema.String,
         title: Schema.String,
         description: Schema.optional(Schema.String),
         position: Schema.optional(Schema.Number),
       }),
-      success: GroupRuleEntry,
+      success: SpaceRuleEntry,
       error: [RuleForbidden, HttpApiError.InternalServerError],
     }),
     HttpApiEndpoint.patch("update", "/:id", {
@@ -46,7 +47,7 @@ export class RulesGroup extends HttpApiGroup.make("rules")
         description: Schema.optional(Schema.NullOr(Schema.String)),
         position: Schema.optional(Schema.Number),
       }),
-      success: GroupRuleEntry,
+      success: SpaceRuleEntry,
       error: [RuleNotFound, RuleForbidden, HttpApiError.InternalServerError],
     }),
     HttpApiEndpoint.delete("delete", "/:id", {

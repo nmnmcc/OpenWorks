@@ -1,8 +1,9 @@
-import { pgTable, uuid, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { index, pgTable, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { v7 } from "uuid";
+
 import { users } from "./auth";
-import { posts } from "./post";
 import { comments } from "./comment";
+import { posts } from "./post";
 
 /**
  * 用户的收藏列表。postId 与 commentId 二选一指向被收藏的帖子或评论，

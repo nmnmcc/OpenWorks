@@ -1,24 +1,37 @@
-import { v7 } from "uuid";
+import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq, and } from "drizzle-orm";
-import { Api, SavedItemEntry, SavedConflict, SavedTargetNotFound, CurrentUser } from "../interfaces";
+import { v7 } from "uuid";
+
+import { Config } from "../../config";
 import { Database } from "../../database";
-import { savedItems } from "../../database/schema";
+import { savedItems } from "../../database/schema/saved-item";
+import { Api } from "../interfaces";
+import { CurrentUser } from "../interfaces/middlewares/auth";
+import { SavedConflict, SavedItemEntry, SavedTargetNotFound } from "../interfaces/saved";
 
 export const SavedHandlers = HttpApiBuilder.group(
   Api,
   "saved",
   Effect.fn(function* (handlers) {
+    const config = yield* Config;
     const database = yield* Database;
 
     return handlers
-      .handle("list", () =>
+      .handle("list", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
+          const offset = query.offset ?? 0;
           const rows = yield* database.query.savedItems.findMany({
-            where: { userId: user.id },
+            where: {
+              userId: user.id,
+              postId: query.postId,
+              commentId: query.commentId,
+            },
             orderBy: { createdAt: "desc" },
+            limit,
+            offset,
           });
           return rows.map((row) => new SavedItemEntry(row));
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
@@ -73,12 +86,18 @@ export const SavedHandlers = HttpApiBuilder.group(
           return new SavedItemEntry(row!);
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
       )
-      .handle("unsave", ({ params }) =>
+      .handle("unsave", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          yield* database
-            .delete(savedItems)
-            .where(and(eq(savedItems.id, params.id), eq(savedItems.userId, user.id)));
+          if (query.postId !== undefined) {
+            yield* database
+              .delete(savedItems)
+              .where(and(eq(savedItems.userId, user.id), eq(savedItems.postId, query.postId)));
+          } else if (query.commentId !== undefined) {
+            yield* database
+              .delete(savedItems)
+              .where(and(eq(savedItems.userId, user.id), eq(savedItems.commentId, query.commentId)));
+          }
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
       );
   }),

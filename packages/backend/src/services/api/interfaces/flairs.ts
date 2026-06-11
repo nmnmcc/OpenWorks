@@ -1,10 +1,11 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
+
 import { AuthMiddleware } from "./middlewares/auth";
 
 export class PostFlairEntry extends Schema.Class<PostFlairEntry>("PostFlairEntry")({
   id: Schema.String,
-  groupId: Schema.String,
+  spaceId: Schema.String,
   name: Schema.String,
   color: Schema.NullOr(Schema.String),
   createdAt: Schema.DateFromString,
@@ -13,7 +14,7 @@ export class PostFlairEntry extends Schema.Class<PostFlairEntry>("PostFlairEntry
 
 export class UserFlairEntry extends Schema.Class<UserFlairEntry>("UserFlairEntry")({
   id: Schema.String,
-  groupId: Schema.String,
+  spaceId: Schema.String,
   userId: Schema.String,
   text: Schema.String,
   color: Schema.NullOr(Schema.String),
@@ -37,14 +38,14 @@ export class FlairsGroup extends HttpApiGroup.make("flairs")
   .add(
     HttpApiEndpoint.get("listPostFlairs", "/post-flairs", {
       query: {
-        groupId: Schema.String,
+        spaceId: Schema.String,
       },
       success: Schema.Array(PostFlairEntry),
       error: [FlairForbidden, HttpApiError.InternalServerError],
     }),
     HttpApiEndpoint.post("createPostFlair", "/post-flairs", {
       payload: Schema.Struct({
-        groupId: Schema.String,
+        spaceId: Schema.String,
         name: Schema.String,
         color: Schema.optional(Schema.String),
       }),
@@ -67,7 +68,7 @@ export class FlairsGroup extends HttpApiGroup.make("flairs")
     }),
     HttpApiEndpoint.get("getUserFlair", "/user-flairs", {
       query: {
-        groupId: Schema.String,
+        spaceId: Schema.String,
         userId: Schema.String,
       },
       success: Schema.NullOr(UserFlairEntry),
@@ -75,7 +76,7 @@ export class FlairsGroup extends HttpApiGroup.make("flairs")
     }),
     HttpApiEndpoint.put("setUserFlair", "/user-flairs", {
       payload: Schema.Struct({
-        groupId: Schema.String,
+        spaceId: Schema.String,
         userId: Schema.String,
         text: Schema.String,
         color: Schema.optional(Schema.String),
@@ -85,7 +86,7 @@ export class FlairsGroup extends HttpApiGroup.make("flairs")
     }),
     HttpApiEndpoint.delete("removeUserFlair", "/user-flairs", {
       query: {
-        groupId: Schema.String,
+        spaceId: Schema.String,
         userId: Schema.String,
       },
       success: HttpApiSchema.NoContent,

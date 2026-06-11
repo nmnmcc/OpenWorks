@@ -1,9 +1,10 @@
 import { Ability } from "@nmnmcc/ability";
-import { Context, Effect, Layer } from "effect";
 import { and, eq } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
+import { Context, Effect, Layer } from "effect";
+
 import { Database } from "../database";
-import { groupMembers, permissions, rolePermissions } from "../database/schema";
+import { permissions, rolePermissions, spaceMembers } from "../database/schema/space";
 import type { Subjects } from "./subjects";
 
 export type { Subjects } from "./subjects";
@@ -24,11 +25,11 @@ export class Authorization extends Context.Service<Authorization>()(
   "@openworks/backend/services/authorization/Authorization",
   {
     make: Effect.gen(function* () {
-      const db = yield* Database;
+      const database = yield* Database;
 
-      const buildAbility = (userId: string, groupId: string): Effect.Effect<AuthorizationAbility, BuildAbilityError> =>
+      const buildAbility = (userId: string, spaceId: string): Effect.Effect<AuthorizationAbility, BuildAbilityError> =>
         Effect.gen(function* () {
-          const rows = yield* db
+          const rows = yield* database
             .select({
               action: permissions.action,
               subject: permissions.subject,
@@ -37,13 +38,13 @@ export class Authorization extends Context.Service<Authorization>()(
               inverted: permissions.inverted,
               reason: permissions.reason,
             })
-            .from(groupMembers)
-            .innerJoin(rolePermissions, eq(groupMembers.roleId, rolePermissions.roleId))
+            .from(spaceMembers)
+            .innerJoin(rolePermissions, eq(spaceMembers.roleId, rolePermissions.roleId))
             .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
-            .where(and(eq(groupMembers.userId, userId), eq(groupMembers.groupId, groupId)));
+            .where(and(eq(spaceMembers.userId, userId), eq(spaceMembers.spaceId, spaceId)));
 
           const rawRules: ReadonlyArray<
-            Ability.RawRule<string, Ability.RuleSubject<Subjects>, string, Ability.MongoCondition<any>>
+            Ability.RawRule<string, Ability.RuleSubject<Subjects>, string, Ability.MongoCondition<object>>
           > = rows.map((row) => ({
             action: row.action,
             subject: row.subject as Ability.RuleSubject<Subjects>,
@@ -61,18 +62,18 @@ export class Authorization extends Context.Service<Authorization>()(
 
         check: (
           userId: string,
-          groupId: string,
+          spaceId: string,
           request: Ability.CheckRequest<Subjects, Ability.AnyRule>,
         ): Effect.Effect<void, CheckError> =>
-          buildAbility(userId, groupId).pipe(Effect.flatMap((ability) => Ability.check(ability, request))),
+          buildAbility(userId, spaceId).pipe(Effect.flatMap((ability) => Ability.check(ability, request))),
 
         permittedFields: (
           userId: string,
-          groupId: string,
+          spaceId: string,
           request: Ability.CheckRequest<Subjects, Ability.AnyRule>,
           options: Ability.PermittedFieldsOptions<Ability.AnyRule>,
         ): Effect.Effect<ReadonlyArray<string>, PermittedFieldsError> =>
-          buildAbility(userId, groupId).pipe(
+          buildAbility(userId, spaceId).pipe(
             Effect.flatMap((ability) => Ability.permittedFields(ability, request, options)),
           ),
       } as const;

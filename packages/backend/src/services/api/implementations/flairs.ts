@@ -1,11 +1,15 @@
-import { v7 } from "uuid";
+import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq, and } from "drizzle-orm";
-import { Api, PostFlairEntry, UserFlairEntry, FlairNotFound, FlairForbidden, CurrentUser } from "../interfaces";
-import { Database } from "../../database";
+import { v7 } from "uuid";
+
 import { Authorization } from "../../authorization";
-import { postFlairs, userFlairs } from "../../database/schema";
+import { Database } from "../../database";
+import { postFlairs } from "../../database/schema/post";
+import { userFlairs } from "../../database/schema/user-flair";
+import { Api } from "../interfaces";
+import { FlairForbidden, FlairNotFound, PostFlairEntry, UserFlairEntry } from "../interfaces/flairs";
+import { CurrentUser } from "../interfaces/middlewares/auth";
 
 export const FlairsHandlers = HttpApiBuilder.group(
   Api,
@@ -18,13 +22,13 @@ export const FlairsHandlers = HttpApiBuilder.group(
       .handle("listPostFlairs", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          const group = yield* database.query.groups.findFirst({
-            where: { id: query.groupId },
+          const space = yield* database.query.spaces.findFirst({
+            where: { id: query.spaceId },
           });
-          if (group && group.visibility === "private") {
-            const membership = yield* database.query.groupMembers.findFirst({
+          if (space && space.visibility === "private") {
+            const membership = yield* database.query.spaceMembers.findFirst({
               where: {
-                groupId: query.groupId,
+                spaceId: query.spaceId,
                 userId: user.id,
               },
             });
@@ -33,7 +37,7 @@ export const FlairsHandlers = HttpApiBuilder.group(
             }
           }
           const rows = yield* database.query.postFlairs.findMany({
-            where: { groupId: query.groupId },
+            where: { spaceId: query.spaceId },
             orderBy: { createdAt: "asc" },
           });
           return rows.map((row) => new PostFlairEntry(row));
@@ -42,7 +46,7 @@ export const FlairsHandlers = HttpApiBuilder.group(
       .handle("createPostFlair", ({ payload }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          yield* authorization.check(user.id, payload.groupId, {
+          yield* authorization.check(user.id, payload.spaceId, {
             action: "manage",
             subject: "PostFlair",
           });
@@ -50,7 +54,7 @@ export const FlairsHandlers = HttpApiBuilder.group(
             .insert(postFlairs)
             .values({
               id: v7(),
-              groupId: payload.groupId,
+              spaceId: payload.spaceId,
               name: payload.name,
               color: payload.color,
             })
@@ -74,7 +78,7 @@ export const FlairsHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new FlairNotFound();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
             subject: "PostFlair",
           });
@@ -105,7 +109,7 @@ export const FlairsHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new FlairNotFound();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
             subject: "PostFlair",
           });
@@ -122,13 +126,13 @@ export const FlairsHandlers = HttpApiBuilder.group(
       .handle("getUserFlair", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          const group = yield* database.query.groups.findFirst({
-            where: { id: query.groupId },
+          const space = yield* database.query.spaces.findFirst({
+            where: { id: query.spaceId },
           });
-          if (group && group.visibility === "private") {
-            const membership = yield* database.query.groupMembers.findFirst({
+          if (space && space.visibility === "private") {
+            const membership = yield* database.query.spaceMembers.findFirst({
               where: {
-                groupId: query.groupId,
+                spaceId: query.spaceId,
                 userId: user.id,
               },
             });
@@ -138,7 +142,7 @@ export const FlairsHandlers = HttpApiBuilder.group(
           }
           const row = yield* database.query.userFlairs.findFirst({
             where: {
-              groupId: query.groupId,
+              spaceId: query.spaceId,
               userId: query.userId,
             },
           });
@@ -150,9 +154,9 @@ export const FlairsHandlers = HttpApiBuilder.group(
           const user = yield* CurrentUser;
           const isSelf = payload.userId === user.id;
           if (isSelf) {
-            const membership = yield* database.query.groupMembers.findFirst({
+            const membership = yield* database.query.spaceMembers.findFirst({
               where: {
-                groupId: payload.groupId,
+                spaceId: payload.spaceId,
                 userId: user.id,
               },
             });
@@ -160,14 +164,14 @@ export const FlairsHandlers = HttpApiBuilder.group(
               return yield* new FlairForbidden();
             }
           } else {
-            yield* authorization.check(user.id, payload.groupId, {
+            yield* authorization.check(user.id, payload.spaceId, {
               action: "manage",
               subject: "UserFlair",
             });
           }
           const existing = yield* database.query.userFlairs.findFirst({
             where: {
-              groupId: payload.groupId,
+              spaceId: payload.spaceId,
               userId: payload.userId,
             },
           });
@@ -186,7 +190,7 @@ export const FlairsHandlers = HttpApiBuilder.group(
             .insert(userFlairs)
             .values({
               id: v7(),
-              groupId: payload.groupId,
+              spaceId: payload.spaceId,
               userId: payload.userId,
               text: payload.text,
               color: payload.color,
@@ -207,14 +211,14 @@ export const FlairsHandlers = HttpApiBuilder.group(
           const user = yield* CurrentUser;
           const isSelf = query.userId === user.id;
           if (!isSelf) {
-            yield* authorization.check(user.id, query.groupId, {
+            yield* authorization.check(user.id, query.spaceId, {
               action: "manage",
               subject: "UserFlair",
             });
           }
           yield* database
             .delete(userFlairs)
-            .where(and(eq(userFlairs.groupId, query.groupId), eq(userFlairs.userId, query.userId)));
+            .where(and(eq(userFlairs.spaceId, query.spaceId), eq(userFlairs.userId, query.userId)));
         }).pipe(
           Effect.catchTag("AuthorizationError", () => new FlairForbidden()),
           Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),

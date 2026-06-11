@@ -2,10 +2,13 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { Pool } from "pg";
-import * as schema from "../database/schema";
 
-export const make = (pool: Pool) =>
+import * as schema from "../database/schema/all";
+
+export const make = (pool: Pool, baseURL: string) =>
   betterAuth({
+    baseURL,
+    trustedOrigins: ["*"],
     database: drizzleAdapter(drizzle({ client: pool }), {
       provider: "pg",
       camelCase: false,

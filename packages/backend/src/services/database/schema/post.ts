@@ -1,22 +1,22 @@
-import { pgTable, text, uuid, timestamp, jsonb, boolean, integer, index } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { v7 } from "uuid";
-import type { PortableTextBlock } from "../../../libraries/portable-text";
-import { users } from "./auth";
-import { groups } from "./group";
 
-type PortableTextContent = readonly [typeof PortableTextBlock.Type, ...(typeof PortableTextBlock.Type)[]];
+import type { PortableTextContent } from "../../../libraries/portable-text";
+import { users } from "./auth";
+import { spaces } from "./space";
+import { works } from "./work";
 
 /**
- * 群组内可用的帖子标签（flair），由版主定义、发帖时选用，
- * 用于在群组内对帖子做可视化分类与筛选。
+ * 空间内可用的帖子标签（flair），由版主定义、发帖时选用，
+ * 用于在空间内对帖子做可视化分类与筛选。
  */
 export const postFlairs = pgTable(
   "post_flairs",
   {
     id: uuid("id").primaryKey().$defaultFn(v7),
-    groupId: uuid("group_id")
+    spaceId: uuid("space_id")
       .notNull()
-      .references(() => groups.id, { onDelete: "cascade" }),
+      .references(() => spaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     color: text("color"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -25,16 +25,16 @@ export const postFlairs = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("post_flairs_groupId_idx").on(table.groupId)],
+  (table) => [index("post_flairs_spaceId_idx").on(table.spaceId)],
 );
 
 /**
  * 帖子主表。type 区分四种形态（text/link/image/poll）：
  * 文本帖的正文存 content（Portable Text 块数组），链接帖存 url，
- * 投票帖额外关联 polls 表。groupId 为空表示帖子不属于任何群组。
+ * 投票帖额外关联 polls 表。spaceId 为空表示帖子不属于任何空间。
  * removed/removedById/removedReason 实现版务软移除——内容对外隐藏但保留供审计；
  * commentCount/score 为反范式计数，分别随评论与投票变更同步维护。
- * 本表的增删改由数据库触发器写入 searchOutbox，异步同步到全文搜索索引。
+ * 本表的增删改由 Sequin 从 WAL 捕获、经 Kafka 异步同步到全文搜索索引。
  */
 export const posts = pgTable(
   "posts",
@@ -47,10 +47,13 @@ export const posts = pgTable(
     authorId: uuid("author_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    groupId: uuid("group_id").references(() => groups.id, {
+    spaceId: uuid("space_id").references(() => spaces.id, {
       onDelete: "cascade",
     }),
     flairId: uuid("flair_id").references(() => postFlairs.id, {
+      onDelete: "set null",
+    }),
+    workId: uuid("work_id").references(() => works.id, {
       onDelete: "set null",
     }),
     pinned: boolean("pinned").default(false).notNull(),
@@ -72,7 +75,8 @@ export const posts = pgTable(
   },
   (table) => [
     index("posts_authorId_idx").on(table.authorId),
-    index("posts_groupId_idx").on(table.groupId),
+    index("posts_spaceId_idx").on(table.spaceId),
     index("posts_flairId_idx").on(table.flairId),
+    index("posts_workId_idx").on(table.workId),
   ],
 );

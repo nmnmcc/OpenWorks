@@ -1,45 +1,43 @@
-import { Effect, Layer } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node";
 import { createServer } from "node:http";
-import { Api } from "./services/api/index";
-import { Config } from "./services/config/index";
-import { Auth } from "./services/auth/index";
-import { Database, DatabasePool } from "./services/database/index";
-import { Search } from "./services/search/index";
-import { CdcLive } from "./services/cdc/index";
+
+import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Effect, Layer } from "effect";
+import { HttpRouter } from "effect/unstable/http";
+
+import { Api } from "./services/api";
+import { Auth } from "./services/auth";
+import { Config } from "./services/config";
+import { Database, DatabasePool } from "./services/database";
+import { Search } from "./services/search";
 
 const DatabasePoolLive = DatabasePool.layer.pipe(Layer.provide(Config.layer));
-const AuthLive = Auth.layer.pipe(Layer.provide(DatabasePoolLive));
+const AuthLive = Auth.layer.pipe(Layer.provide(DatabasePoolLive), Layer.provide(Config.layer));
 const DatabaseLive = Database.layer.pipe(Layer.provide(DatabasePoolLive));
-const SearchLive = Search.layer.pipe(Layer.provide(Config.layer));
-const CdcLayer = CdcLive.pipe(Layer.provide(DatabaseLive), Layer.provide(SearchLive), Layer.provide(Config.layer));
+const SearchLive = Search.layer.pipe(Layer.provide(DatabaseLive), Layer.provide(Config.layer));
+const SearchSyncLive = Search.syncLayer.pipe(
+  Layer.provide(SearchLive),
+  Layer.provide(DatabaseLive),
+  Layer.provide(Config.layer),
+);
 
-const layer = Layer.mergeAll(NodeHttpServer.layerHttpServices, NodeServices.layer, Config.layer, AuthLive, CdcLayer);
+const layer = Layer.mergeAll(
+  NodeHttpServer.layerHttpServices,
+  NodeServices.layer,
+  Config.layer,
+  AuthLive,
+  SearchSyncLive,
+);
 
 const program = Effect.gen(function* () {
-  const {
-    server: { host, port },
-  } = yield* Config;
-  const auth = yield* Auth;
+  const config = yield* Config;
+  const handler = yield* HttpRouter.toHttpEffect(Api);
 
-  const server = yield* NodeHttpServer.make(createServer, { host, port });
-  const apiHandler = yield* HttpRouter.toHttpEffect(Api);
+  const server = yield* NodeHttpServer.make(createServer, {
+    host: config.server.host,
+    port: config.server.port,
+  });
 
-  yield* server.serve(
-    Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-
-      if (request.url.startsWith("/api/auth")) {
-        const webRequest = yield* HttpServerRequest.toWeb(request);
-        const webResponse = yield* Effect.promise(() => auth.handler(webRequest));
-        return HttpServerResponse.fromWeb(webResponse);
-      }
-
-      return yield* apiHandler;
-    }),
-  );
-
+  yield* server.serve(handler);
   return yield* Effect.never;
 }).pipe(Effect.provide(layer), Effect.scoped);
 

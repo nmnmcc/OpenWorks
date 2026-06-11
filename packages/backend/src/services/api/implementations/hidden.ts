@@ -1,24 +1,36 @@
-import { v7 } from "uuid";
+import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq, and } from "drizzle-orm";
-import { Api, HiddenPostEntry, HiddenTargetNotFound, CurrentUser } from "../interfaces";
+import { v7 } from "uuid";
+
+import { Config } from "../../config";
 import { Database } from "../../database";
-import { hiddenPosts } from "../../database/schema";
+import { hiddenPosts } from "../../database/schema/hidden-post";
+import { Api } from "../interfaces";
+import { HiddenPostEntry, HiddenTargetNotFound } from "../interfaces/hidden";
+import { CurrentUser } from "../interfaces/middlewares/auth";
 
 export const HiddenHandlers = HttpApiBuilder.group(
   Api,
   "hidden",
   Effect.fn(function* (handlers) {
+    const config = yield* Config;
     const database = yield* Database;
 
     return handlers
-      .handle("list", () =>
+      .handle("list", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
+          const offset = query.offset ?? 0;
           const rows = yield* database.query.hiddenPosts.findMany({
-            where: { userId: user.id },
+            where: {
+              userId: user.id,
+              postId: query.postId,
+            },
             orderBy: { createdAt: "desc" },
+            limit,
+            offset,
           });
           return rows.map((row) => new HiddenPostEntry(row));
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
@@ -52,12 +64,12 @@ export const HiddenHandlers = HttpApiBuilder.group(
           return new HiddenPostEntry(row!);
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
       )
-      .handle("unhide", ({ params }) =>
+      .handle("unhide", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
           yield* database
             .delete(hiddenPosts)
-            .where(and(eq(hiddenPosts.id, params.id), eq(hiddenPosts.userId, user.id)));
+            .where(and(eq(hiddenPosts.userId, user.id), eq(hiddenPosts.postId, query.postId)));
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
       );
   }),

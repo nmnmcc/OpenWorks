@@ -1,15 +1,14 @@
-import { pgTable, text, uuid, timestamp, jsonb, boolean, integer, index, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, text, timestamp, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { v7 } from "uuid";
-import type { PortableTextBlock } from "../../../libraries/portable-text";
+
+import type { PortableTextContent } from "../../../libraries/portable-text";
 import { users } from "./auth";
 import { posts } from "./post";
-import { groups } from "./group";
-
-type PortableTextContent = readonly [typeof PortableTextBlock.Type, ...(typeof PortableTextBlock.Type)[]];
+import { spaces } from "./space";
 
 /**
  * 帖子下的评论。parentId 自引用构成无限层级的评论树（为空即顶层评论）；
- * groupId 冗余存储帖子所属群组，使群组级的版务查询与权限判定无需联表回查帖子。
+ * spaceId 冗余存储帖子所属空间，使空间级的版务查询与权限判定无需联表回查帖子。
  * removed/removedById/removedReason 实现版务软移除（保留树结构与审计信息）；
  * score 为投票聚合的反范式计数。
  */
@@ -27,7 +26,7 @@ export const comments = pgTable(
     parentId: uuid("parent_id").references((): AnyPgColumn => comments.id, {
       onDelete: "cascade",
     }),
-    groupId: uuid("group_id").references(() => groups.id, {
+    spaceId: uuid("space_id").references(() => spaces.id, {
       onDelete: "cascade",
     }),
     removed: boolean("removed").default(false).notNull(),
@@ -46,6 +45,6 @@ export const comments = pgTable(
     index("comments_authorId_idx").on(table.authorId),
     index("comments_postId_idx").on(table.postId),
     index("comments_parentId_idx").on(table.parentId),
-    index("comments_groupId_idx").on(table.groupId),
+    index("comments_spaceId_idx").on(table.spaceId),
   ],
 );

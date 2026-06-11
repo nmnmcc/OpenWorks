@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
+
 import { AuthMiddleware } from "./middlewares/auth";
 
 export class Vote extends Schema.Class<Vote>("Vote")({

@@ -1,10 +1,13 @@
-import { v7 } from "uuid";
+import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq, sql } from "drizzle-orm";
-import { Api, PollEntry, PollOptionEntry, PollNotFound, PollClosed, CurrentUser } from "../interfaces";
+import { v7 } from "uuid";
+
 import { Database } from "../../database";
-import { pollOptions, pollVotes } from "../../database/schema";
+import { pollOptions, pollVotes } from "../../database/schema/poll";
+import { Api } from "../interfaces";
+import { CurrentUser } from "../interfaces/middlewares/auth";
+import { PollClosed, PollEntry, PollNotFound, PollOptionEntry } from "../interfaces/polls";
 
 export const PollsHandlers = HttpApiBuilder.group(
   Api,
@@ -29,14 +32,14 @@ export const PollsHandlers = HttpApiBuilder.group(
           if (!post || post.removed) {
             return yield* new PollNotFound();
           }
-          if (post.groupId) {
-            const group = yield* database.query.groups.findFirst({
-              where: { id: post.groupId },
+          if (post.spaceId) {
+            const space = yield* database.query.spaces.findFirst({
+              where: { id: post.spaceId },
             });
-            if (group && group.visibility === "private") {
-              const membership = yield* database.query.groupMembers.findFirst({
+            if (space && space.visibility === "private") {
+              const membership = yield* database.query.spaceMembers.findFirst({
                 where: {
-                  groupId: group.id,
+                  spaceId: space.id,
                   userId: user.id,
                 },
               });
@@ -77,14 +80,14 @@ export const PollsHandlers = HttpApiBuilder.group(
           if (!post || post.removed) {
             return yield* new PollNotFound();
           }
-          if (post.groupId) {
-            const group = yield* database.query.groups.findFirst({
-              where: { id: post.groupId },
+          if (post.spaceId) {
+            const space = yield* database.query.spaces.findFirst({
+              where: { id: post.spaceId },
             });
-            if (group && group.visibility === "private") {
-              const membership = yield* database.query.groupMembers.findFirst({
+            if (space && space.visibility === "private") {
+              const membership = yield* database.query.spaceMembers.findFirst({
                 where: {
-                  groupId: group.id,
+                  spaceId: space.id,
                   userId: user.id,
                 },
               });

@@ -1,11 +1,12 @@
-import { Effect, Layer } from "effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Effect, Layer } from "effect";
 import { Command } from "effect/unstable/cli";
-import { database } from "./commands/database";
-import { searchCommand } from "./commands/search";
+
 import { Config } from "../services/config";
 import { Database, DatabasePool } from "../services/database";
 import { Search } from "../services/search";
+import { database } from "./commands/database";
+import { searchCommand } from "./commands/search";
 
 const cli = Command.make("openworks").pipe(
   Command.withDescription("OpenWorks development CLI"),
@@ -13,6 +14,7 @@ const cli = Command.make("openworks").pipe(
 );
 
 const MainLayer = Layer.mergeAll(Database.layer, Search.layer, NodeServices.layer).pipe(
+  Layer.provide(Database.layer),
   Layer.provide(DatabasePool.layer),
   Layer.provide(Config.layer),
 );

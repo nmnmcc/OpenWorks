@@ -1,28 +1,36 @@
-import { v7 } from "uuid";
-import { Effect } from "effect";
+import { eq, sql } from "drizzle-orm";
+import { Effect, Match } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq } from "drizzle-orm";
-import {
-  Api,
-  Post,
-  PostSearchResult,
-  PostNotFound,
-  PostForbidden,
-  PostGroupNotFound,
-  InvalidPoll,
-  InvalidFlair,
-  CurrentUser,
-} from "../interfaces";
-import { Database } from "../../database";
+import { v7 } from "uuid";
+
 import { Authorization } from "../../authorization";
-import { posts, polls, pollOptions, modLog } from "../../database/schema";
+import { Config } from "../../config";
+import { Database } from "../../database";
+import { modLog } from "../../database/schema/moderation-log";
+import { notifications } from "../../database/schema/notification";
+import { pollOptions, polls } from "../../database/schema/poll";
+import { posts } from "../../database/schema/post";
+import { works } from "../../database/schema/work";
 import { Search } from "../../search";
-import { portableTextToPlainText } from "../../../libraries/portable-text";
+import { Api } from "../interfaces";
+import { CurrentUser } from "../interfaces/middlewares/auth";
+import {
+  InvalidFlair,
+  InvalidPoll,
+  Post,
+  PostForbidden,
+  PostNotFound,
+  PostSearchResult,
+  PostSpaceNotFound,
+  PostWorkNotFound,
+  ReviewConflict,
+} from "../interfaces/posts";
 
 export const PostsHandlers = HttpApiBuilder.group(
   Api,
   "posts",
   Effect.fn(function* (handlers) {
+    const config = yield* Config;
     const database = yield* Database;
     const search = yield* Search;
     const authorization = yield* Authorization;
@@ -32,34 +40,37 @@ export const PostsHandlers = HttpApiBuilder.group(
         Effect.gen(function* () {
           const user = yield* CurrentUser;
           const sort = query.sort ?? "hot";
-          const limit = Math.min(query.limit ?? 25, 100);
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
           const offset = query.offset ?? 0;
           const rows = yield* database.query.posts.findMany({
             where: {
               removed: false,
-              groupId: query.groupId,
-              group: query.feed === "home" ? { members: { userId: user.id } } : undefined,
+              spaceId: query.spaceId,
+              workId: query.workId,
+              type: query.kind === "review" ? "review" : query.kind === "discussion" ? { ne: "review" } : undefined,
+              space: query.feed === "home" ? { members: { userId: user.id } } : undefined,
+              NOT: { hiddenPosts: { userId: user.id } },
               OR: [
-                { groupId: { isNull: true } },
+                { spaceId: { isNull: true } },
                 {
-                  group: {
+                  space: {
                     visibility: { ne: "private" },
                   },
                 },
-                { group: { members: { userId: user.id } } },
+                { space: { members: { userId: user.id } } },
               ],
             },
-            orderBy:
-              sort === "new"
-                ? (table, { desc }) => [desc(table.pinned), desc(table.createdAt)]
-                : sort === "top"
-                  ? (table, { desc }) => [desc(table.pinned), desc(table.score), desc(table.createdAt)]
-                  : (table, { desc, sql }) => [
-                      desc(table.pinned),
-                      desc(
-                        sql`log(greatest(abs(${table.score}), 1)) * sign(${table.score}) + extract(epoch from ${table.createdAt}) / 45000`,
-                      ),
-                    ],
+            orderBy: (table, { desc, sql }) =>
+              Match.value(sort).pipe(
+                Match.when("new", () => [desc(table.pinned), desc(table.createdAt)]),
+                Match.when("top", () => [desc(table.pinned), desc(table.score), desc(table.createdAt)]),
+                Match.orElse(() => [
+                  desc(table.pinned),
+                  desc(
+                    sql`log(greatest(abs(${table.score}), 1)) * sign(${table.score}) + extract(epoch from ${table.createdAt}) / ${config.hotScoring.decayDivisor}`,
+                  ),
+                ]),
+              ),
             limit,
             offset,
           });
@@ -69,19 +80,12 @@ export const PostsHandlers = HttpApiBuilder.group(
       .handle("search", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          const limit = query.limit ?? 20;
+          const limit = query.limit ?? config.pagination.searchDefaultLimit;
           const offset = query.offset ?? 0;
 
-          const result = yield* Effect.tryPromise(() =>
-            search.index("posts").search(query.q, {
-              filter: query.groupId ? `groupId = "${query.groupId}"` : undefined,
-              sort: ["createdAt:desc"],
-              limit,
-              offset,
-            }),
-          );
+          const result = yield* search.searchPosts({ q: query.q, spaceId: query.spaceId, limit, offset });
 
-          const ids = result.hits.map((hit) => hit["id"] as string);
+          const ids = result.hits.map((hit) => hit.id);
 
           if (ids.length === 0) {
             return new PostSearchResult({
@@ -99,13 +103,13 @@ export const PostsHandlers = HttpApiBuilder.group(
               id: { in: ids },
               removed: false,
               OR: [
-                { groupId: { isNull: true } },
+                { spaceId: { isNull: true } },
                 {
-                  group: {
+                  space: {
                     visibility: { ne: "private" },
                   },
                 },
-                { group: { members: { userId: user.id } } },
+                { space: { members: { userId: user.id } } },
               ],
             },
           });
@@ -138,14 +142,14 @@ export const PostsHandlers = HttpApiBuilder.group(
           if (!row) {
             return yield* new PostNotFound();
           }
-          if (row.groupId) {
-            const group = yield* database.query.groups.findFirst({
-              where: { id: row.groupId },
+          if (row.spaceId) {
+            const space = yield* database.query.spaces.findFirst({
+              where: { id: row.spaceId },
             });
-            if (group && group.visibility === "private") {
-              const membership = yield* database.query.groupMembers.findFirst({
+            if (space && space.visibility === "private") {
+              const membership = yield* database.query.spaceMembers.findFirst({
                 where: {
-                  groupId: group.id,
+                  spaceId: space.id,
                   userId: user.id,
                 },
               });
@@ -161,32 +165,32 @@ export const PostsHandlers = HttpApiBuilder.group(
         Effect.gen(function* () {
           const user = yield* CurrentUser;
 
-          if (payload.groupId) {
-            const group = yield* database.query.groups.findFirst({
-              where: { id: payload.groupId },
+          if (payload.spaceId) {
+            const space = yield* database.query.spaces.findFirst({
+              where: { id: payload.spaceId },
             });
-            if (!group) {
-              return yield* new PostGroupNotFound();
+            if (!space) {
+              return yield* new PostSpaceNotFound();
             }
-            if (group.postingRestriction === "moderator") {
-              yield* authorization.check(user.id, payload.groupId, {
+            if (space.postingRestriction === "moderator") {
+              yield* authorization.check(user.id, payload.spaceId, {
                 action: "manage",
                 subject: "Post",
               });
-            } else if (group.postingRestriction === "admin") {
-              yield* authorization.check(user.id, payload.groupId, {
+            } else if (space.postingRestriction === "admin") {
+              yield* authorization.check(user.id, payload.spaceId, {
                 action: "manage",
-                subject: "Group",
+                subject: "Space",
               });
             } else {
-              yield* authorization.check(user.id, payload.groupId, {
+              yield* authorization.check(user.id, payload.spaceId, {
                 action: "create",
                 subject: "Post",
               });
             }
-            const mute = yield* database.query.groupMutes.findFirst({
+            const mute = yield* database.query.spaceMutes.findFirst({
               where: {
-                groupId: payload.groupId,
+                spaceId: payload.spaceId,
                 userId: user.id,
               },
             });
@@ -199,7 +203,7 @@ export const PostsHandlers = HttpApiBuilder.group(
             const flair = yield* database.query.postFlairs.findFirst({
               where: { id: payload.flairId },
             });
-            if (!flair || !payload.groupId || flair.groupId !== payload.groupId) {
+            if (!flair || !payload.spaceId || flair.spaceId !== payload.spaceId) {
               return yield* new InvalidFlair();
             }
           }
@@ -211,6 +215,33 @@ export const PostsHandlers = HttpApiBuilder.group(
             return yield* new InvalidPoll();
           }
 
+          if (postType === "review") {
+            if (!payload.workId) {
+              return yield* new PostWorkNotFound();
+            }
+            const work = yield* database.query.works.findFirst({
+              where: { id: payload.workId },
+            });
+            if (!work) {
+              return yield* new PostWorkNotFound();
+            }
+            const existingReview = yield* database.query.posts.findFirst({
+              where: { authorId: user.id, workId: payload.workId, type: "review" },
+            });
+            if (existingReview) {
+              return yield* new ReviewConflict();
+            }
+          }
+
+          if (payload.workId && postType !== "review") {
+            const work = yield* database.query.works.findFirst({
+              where: { id: payload.workId },
+            });
+            if (!work) {
+              return yield* new PostWorkNotFound();
+            }
+          }
+
           const [row] = yield* database
             .insert(posts)
             .values({
@@ -220,12 +251,33 @@ export const PostsHandlers = HttpApiBuilder.group(
               content: payload.content,
               url: payload.url,
               authorId: user.id,
-              groupId: payload.groupId,
+              spaceId: payload.spaceId,
               flairId: payload.flairId,
+              workId: payload.workId,
               nsfw: payload.nsfw ?? false,
               spoiler: payload.spoiler ?? false,
             })
             .returning();
+
+          if (postType === "review" && payload.workId) {
+            yield* database
+              .update(works)
+              .set({ reviewCount: sql`${works.reviewCount} + 1` })
+              .where(eq(works.id, payload.workId));
+            const work = yield* database.query.works.findFirst({
+              where: { id: payload.workId },
+            });
+            if (work && work.createdById && work.createdById !== user.id) {
+              yield* database.insert(notifications).values({
+                id: v7(),
+                userId: work.createdById,
+                type: "work_review",
+                title: `New review on "${work.title}"`,
+                body: payload.title,
+                linkUrl: `/library/works/${work.id}`,
+              });
+            }
+          }
 
           if (postType === "poll" && payload.pollOptions) {
             const pollId = v7();
@@ -243,21 +295,6 @@ export const PostsHandlers = HttpApiBuilder.group(
               })),
             );
           }
-
-          const content = row!.content ? portableTextToPlainText(row!.content) : "";
-
-          yield* Effect.tryPromise(() =>
-            search.index("posts").addDocuments([
-              {
-                id: row!.id,
-                title: row!.title,
-                content,
-                authorId: row!.authorId,
-                groupId: row!.groupId,
-                createdAt: row!.createdAt.toISOString(),
-              },
-            ]),
-          ).pipe(Effect.ignore);
 
           return new Post(row!);
         }).pipe(
@@ -279,14 +316,14 @@ export const PostsHandlers = HttpApiBuilder.group(
             return yield* new PostNotFound();
           }
 
-          if (existing.groupId) {
+          if (existing.spaceId) {
             if (existing.authorId === user.id) {
-              yield* authorization.check(user.id, existing.groupId, {
+              yield* authorization.check(user.id, existing.spaceId, {
                 action: "update",
                 subject: "Post",
               });
             } else {
-              yield* authorization.check(user.id, existing.groupId, {
+              yield* authorization.check(user.id, existing.spaceId, {
                 action: "manage",
                 subject: "Post",
               });
@@ -299,7 +336,7 @@ export const PostsHandlers = HttpApiBuilder.group(
             const flair = yield* database.query.postFlairs.findFirst({
               where: { id: payload.flairId },
             });
-            if (!flair || flair.groupId !== existing.groupId) {
+            if (!flair || flair.spaceId !== existing.spaceId) {
               return yield* new InvalidFlair();
             }
           }
@@ -316,21 +353,6 @@ export const PostsHandlers = HttpApiBuilder.group(
             })
             .where(eq(posts.id, params.id))
             .returning();
-
-          const content = row!.content ? portableTextToPlainText(row!.content) : "";
-
-          yield* Effect.tryPromise(() =>
-            search.index("posts").addDocuments([
-              {
-                id: row!.id,
-                title: row!.title,
-                content,
-                authorId: row!.authorId,
-                groupId: row!.groupId,
-                createdAt: row!.createdAt.toISOString(),
-              },
-            ]),
-          ).pipe(Effect.ignore);
 
           return new Post(row!);
         }).pipe(
@@ -351,17 +373,17 @@ export const PostsHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new PostNotFound();
           }
-          if (!existing.groupId) {
+          if (!existing.spaceId) {
             return yield* new PostForbidden();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
             subject: "Post",
           });
           const [row] = yield* database.update(posts).set({ pinned: true }).where(eq(posts.id, params.id)).returning();
           yield* database.insert(modLog).values({
             id: v7(),
-            groupId: existing.groupId,
+            spaceId: existing.spaceId,
             moderatorId: user.id,
             action: "post_pin",
             targetType: "post",
@@ -386,17 +408,17 @@ export const PostsHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new PostNotFound();
           }
-          if (!existing.groupId) {
+          if (!existing.spaceId) {
             return yield* new PostForbidden();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
             subject: "Post",
           });
           const [row] = yield* database.update(posts).set({ pinned: false }).where(eq(posts.id, params.id)).returning();
           yield* database.insert(modLog).values({
             id: v7(),
-            groupId: existing.groupId,
+            spaceId: existing.spaceId,
             moderatorId: user.id,
             action: "post_unpin",
             targetType: "post",
@@ -421,17 +443,17 @@ export const PostsHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new PostNotFound();
           }
-          if (!existing.groupId) {
+          if (!existing.spaceId) {
             return yield* new PostForbidden();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
             subject: "Post",
           });
           const [row] = yield* database.update(posts).set({ locked: true }).where(eq(posts.id, params.id)).returning();
           yield* database.insert(modLog).values({
             id: v7(),
-            groupId: existing.groupId,
+            spaceId: existing.spaceId,
             moderatorId: user.id,
             action: "post_lock",
             targetType: "post",
@@ -456,17 +478,17 @@ export const PostsHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new PostNotFound();
           }
-          if (!existing.groupId) {
+          if (!existing.spaceId) {
             return yield* new PostForbidden();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
             subject: "Post",
           });
           const [row] = yield* database.update(posts).set({ locked: false }).where(eq(posts.id, params.id)).returning();
           yield* database.insert(modLog).values({
             id: v7(),
-            groupId: existing.groupId,
+            spaceId: existing.spaceId,
             moderatorId: user.id,
             action: "post_unlock",
             targetType: "post",
@@ -491,10 +513,10 @@ export const PostsHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new PostNotFound();
           }
-          if (!existing.groupId) {
+          if (!existing.spaceId) {
             return yield* new PostForbidden();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
             subject: "Post",
           });
@@ -509,7 +531,7 @@ export const PostsHandlers = HttpApiBuilder.group(
             .returning();
           yield* database.insert(modLog).values({
             id: v7(),
-            groupId: existing.groupId,
+            spaceId: existing.spaceId,
             moderatorId: user.id,
             action: "post_remove",
             targetType: "post",
@@ -536,14 +558,14 @@ export const PostsHandlers = HttpApiBuilder.group(
             return yield* new PostNotFound();
           }
 
-          if (existing.groupId) {
+          if (existing.spaceId) {
             if (existing.authorId === user.id) {
-              yield* authorization.check(user.id, existing.groupId, {
+              yield* authorization.check(user.id, existing.spaceId, {
                 action: "delete",
                 subject: "Post",
               });
             } else {
-              yield* authorization.check(user.id, existing.groupId, {
+              yield* authorization.check(user.id, existing.spaceId, {
                 action: "manage",
                 subject: "Post",
               });
@@ -552,9 +574,14 @@ export const PostsHandlers = HttpApiBuilder.group(
             return yield* new PostForbidden();
           }
 
-          yield* database.delete(posts).where(eq(posts.id, params.id));
+          if (existing.type === "review" && existing.workId) {
+            yield* database
+              .update(works)
+              .set({ reviewCount: sql`greatest(${works.reviewCount} - 1, 0)` })
+              .where(eq(works.id, existing.workId));
+          }
 
-          yield* Effect.tryPromise(() => search.index("posts").deleteDocument(params.id)).pipe(Effect.ignore);
+          yield* database.delete(posts).where(eq(posts.id, params.id));
         }).pipe(
           Effect.catchTag("AuthorizationError", () => new PostForbidden()),
           Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),

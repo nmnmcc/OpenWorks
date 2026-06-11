@@ -1,8 +1,17 @@
 "use client";
 
+import { LocaleSync } from "@/lib/i18n/locale";
 import { RegistryProvider } from "@effect/atom-react";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 import type { ReactNode } from "react";
 
 export function Providers({ children }: { readonly children: ReactNode }) {
-  return <RegistryProvider>{children}</RegistryProvider>;
+  return (
+    <RegistryProvider>
+      <NuqsAdapter>
+        <LocaleSync />
+        {children}
+      </NuqsAdapter>
+    </RegistryProvider>
+  );
 }

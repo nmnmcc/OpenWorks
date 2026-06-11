@@ -1,21 +1,18 @@
-import type { ReactNode } from "react";
 import { Providers } from "@/components/Providers";
-import { Header } from "@/components/Header";
+import type { ReactNode } from "react";
+
 import "./globals.css";
 
 export const metadata = {
   title: "OpenWorks",
-  description: "OpenWorks — collaborative workspace",
+  description: "OpenWorks — community platform",
 };
 
 export default function RootLayout({ children }: { readonly children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <Providers>
-          <Header />
-          <main>{children}</main>
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

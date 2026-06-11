@@ -1,12 +1,15 @@
-import { Context, Data, Effect, Layer, Record } from "effect";
-import { make } from "./make";
-import { DatabasePool } from "../database";
 import { APIError } from "better-auth";
+import { Context, Data, Effect, Layer, Record } from "effect";
+
+import { Config } from "../config";
+import { DatabasePool } from "../database";
+import { make } from "./make";
 
 export class Auth extends Context.Service<Auth>()("@openworks/frontend/services/auth/Auth", {
   make: Effect.gen(function* () {
     const pool = yield* DatabasePool;
-    const auth = make(pool);
+    const config = yield* Config;
+    const auth = make(pool, config.server.baseURL);
 
     type API = {
       [K in keyof typeof auth.api]: (typeof auth.api)[K] extends (...args: infer A) => PromiseLike<infer R>
@@ -17,8 +20,8 @@ export class Auth extends Context.Service<Auth>()("@openworks/frontend/services/
     return {
       ...auth,
       api: Record.map(
-        auth.api,
-        (endpoint: any) => (params: unknown) =>
+        auth.api as globalThis.Record<string, (params: unknown) => PromiseLike<unknown>>,
+        (endpoint) => (params: unknown) =>
           Effect.tryPromise({
             try: () => endpoint(params),
             catch: (cause) =>

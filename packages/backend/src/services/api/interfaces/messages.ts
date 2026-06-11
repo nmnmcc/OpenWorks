@@ -1,5 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
+
+import { PortableText } from "../../../libraries/portable-text";
 import { AuthMiddleware } from "./middlewares/auth";
 
 export class MessageEntry extends Schema.Class<MessageEntry>("MessageEntry")({
@@ -7,7 +9,7 @@ export class MessageEntry extends Schema.Class<MessageEntry>("MessageEntry")({
   senderId: Schema.String,
   recipientId: Schema.String,
   subject: Schema.String,
-  body: Schema.String,
+  body: PortableText,
   isRead: Schema.Boolean,
   createdAt: Schema.DateFromString,
 }) {}
@@ -33,10 +35,18 @@ export class RecipientNotFound extends Schema.TaggedErrorClass<RecipientNotFound
 export class MessagesGroup extends HttpApiGroup.make("messages")
   .add(
     HttpApiEndpoint.get("inbox", "/inbox", {
+      query: {
+        limit: Schema.optional(Schema.NumberFromString),
+        offset: Schema.optional(Schema.NumberFromString),
+      },
       success: Schema.Array(MessageEntry),
       error: HttpApiError.InternalServerError,
     }),
     HttpApiEndpoint.get("sent", "/sent", {
+      query: {
+        limit: Schema.optional(Schema.NumberFromString),
+        offset: Schema.optional(Schema.NumberFromString),
+      },
       success: Schema.Array(MessageEntry),
       error: HttpApiError.InternalServerError,
     }),
@@ -49,7 +59,7 @@ export class MessagesGroup extends HttpApiGroup.make("messages")
       payload: Schema.Struct({
         recipientId: Schema.String,
         subject: Schema.String,
-        body: Schema.String,
+        body: PortableText,
       }),
       success: MessageEntry,
       error: [RecipientNotFound, HttpApiError.InternalServerError],

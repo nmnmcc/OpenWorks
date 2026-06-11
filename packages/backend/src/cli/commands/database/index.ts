@@ -1,7 +1,8 @@
-import { Console, Effect } from "effect";
-import { Command, Flag } from "effect/unstable/cli";
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/effect-postgres/migrator";
+import { Console, Effect } from "effect";
+import { Command, Flag } from "effect/unstable/cli";
+
 import { Database } from "../../../services/database";
 import { runSeed } from "./seed";
 

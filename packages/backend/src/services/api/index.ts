@@ -1,30 +1,37 @@
-import { Layer } from "effect";
-import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
+import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
-import { Api as Interfaces } from "./interfaces";
-import {
-  PostsHandlers,
-  HealthHandlers,
-  GroupsHandlers,
-  CommentsHandlers,
-  VotesHandlers,
-  FlairsHandlers,
-  SavedHandlers,
-  HiddenHandlers,
-  ReportsHandlers,
-  RulesHandlers,
-  ModLogHandlers,
-  MessagesHandlers,
-  NotificationsHandlers,
-  WikiHandlers,
-  UsersHandlers,
-  PollsHandlers,
-} from "./implementations";
-import { Auth } from "../auth/index";
-import { Database, DatabasePool } from "../database/index";
-import { Search } from "../search/index";
-import { Authorization } from "../authorization/index";
+import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
+
+import { Auth } from "../auth";
+import { Authorization } from "../authorization";
+import { Config } from "../config";
+import { Database, DatabasePool } from "../database";
+import { ExternalImport } from "../import";
+import { Search } from "../search";
+import { CommentsHandlers } from "./implementations/comments";
+import { CreatorsHandlers } from "./implementations/creators";
+import { FlairsHandlers } from "./implementations/flairs";
+import { HealthHandlers } from "./implementations/health";
+import { HiddenHandlers } from "./implementations/hidden";
+import { LibraryHandlers } from "./implementations/library";
+import { MediaHandlers } from "./implementations/media";
+import { MessagesHandlers } from "./implementations/messages";
 import { AuthMiddlewareLive } from "./implementations/middlewares/auth";
+import { ModerationLogsHandlers } from "./implementations/moderation-log";
+import { NotificationsHandlers } from "./implementations/notifications";
+import { PollsHandlers } from "./implementations/polls";
+import { PostsHandlers } from "./implementations/posts";
+import { ReportsHandlers } from "./implementations/reports";
+import { RulesHandlers } from "./implementations/rules";
+import { SavedHandlers } from "./implementations/saved";
+import { ShelvesHandlers } from "./implementations/shelves";
+import { SpacesHandlers } from "./implementations/spaces";
+import { UsersHandlers } from "./implementations/users";
+import { VotesHandlers } from "./implementations/votes";
+import { WikiHandlers } from "./implementations/wiki";
+import { WorksHandlers } from "./implementations/works";
+import { Api as Interfaces } from "./interfaces";
+import { AuthRoutes } from "./routes/auth";
 
 export const Api = HttpApiBuilder.layer(Interfaces, {
   openapiPath: "/openapi.json",
@@ -34,14 +41,15 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(AuthMiddlewareLive),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
+      Layer.provide(Search.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
-      Layer.provide(Search.layer),
     ),
-    GroupsHandlers.pipe(
+    SpacesHandlers.pipe(
       Layer.provide(AuthMiddlewareLive),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
+      Layer.provide(Search.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
@@ -49,6 +57,7 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(AuthMiddlewareLive),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
+      Layer.provide(Search.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
@@ -92,7 +101,7 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
-    ModLogHandlers.pipe(
+    ModerationLogsHandlers.pipe(
       Layer.provide(AuthMiddlewareLive),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
@@ -115,12 +124,14 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(AuthMiddlewareLive),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
+      Layer.provide(Search.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
     UsersHandlers.pipe(
       Layer.provide(AuthMiddlewareLive),
       Layer.provide(Auth.layer),
+      Layer.provide(Search.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
@@ -130,11 +141,44 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
+    WorksHandlers.pipe(
+      Layer.provide(AuthMiddlewareLive),
+      Layer.provide(Auth.layer),
+      Layer.provide(ExternalImport.layer),
+      Layer.provide(Search.layer),
+      Layer.provide(Database.layer),
+      Layer.provide(DatabasePool.layer),
+    ),
+    CreatorsHandlers.pipe(
+      Layer.provide(AuthMiddlewareLive),
+      Layer.provide(Auth.layer),
+      Layer.provide(Database.layer),
+      Layer.provide(DatabasePool.layer),
+    ),
+    LibraryHandlers.pipe(
+      Layer.provide(AuthMiddlewareLive),
+      Layer.provide(Auth.layer),
+      Layer.provide(Database.layer),
+      Layer.provide(DatabasePool.layer),
+    ),
+    ShelvesHandlers.pipe(
+      Layer.provide(AuthMiddlewareLive),
+      Layer.provide(Auth.layer),
+      Layer.provide(Database.layer),
+      Layer.provide(DatabasePool.layer),
+    ),
+    MediaHandlers.pipe(Layer.provide(AuthMiddlewareLive), Layer.provide(Auth.layer), Layer.provide(DatabasePool.layer)),
+    AuthRoutes.pipe(Layer.provide(Auth.layer), Layer.provide(DatabasePool.layer)),
     HealthHandlers,
     HttpApiScalar.layer(Interfaces, { path: "/docs" }),
-    HttpRouter.cors({
-      allowedOrigins: ["http://localhost:3000"],
-      credentials: true,
-    }),
+    Layer.unwrap(
+      Effect.gen(function* () {
+        const config = yield* Config;
+        return HttpRouter.cors({
+          allowedOrigins: config.server.corsOrigins,
+          credentials: true,
+        });
+      }),
+    ),
   ]),
 );

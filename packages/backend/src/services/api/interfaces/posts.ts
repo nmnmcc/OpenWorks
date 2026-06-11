@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
+
 import { PortableText } from "../../../libraries/portable-text";
 import { AuthMiddleware } from "./middlewares/auth";
 
@@ -10,7 +11,7 @@ export class Post extends Schema.Class<Post>("Post")({
   content: Schema.NullOr(PortableText),
   url: Schema.NullOr(Schema.String),
   authorId: Schema.String,
-  groupId: Schema.NullOr(Schema.String),
+  spaceId: Schema.NullOr(Schema.String),
   flairId: Schema.NullOr(Schema.String),
   pinned: Schema.Boolean,
   locked: Schema.Boolean,
@@ -19,6 +20,7 @@ export class Post extends Schema.Class<Post>("Post")({
   removed: Schema.Boolean,
   commentCount: Schema.Number,
   score: Schema.Number,
+  workId: Schema.NullOr(Schema.String),
   createdAt: Schema.DateFromString,
   updatedAt: Schema.DateFromString,
 }) {}
@@ -40,27 +42,33 @@ export class PostForbidden extends Schema.TaggedErrorClass<PostForbidden>()(
   { httpApiStatus: 403 },
 ) {}
 
-export class PostGroupNotFound extends Schema.TaggedErrorClass<PostGroupNotFound>()(
-  "PostGroupNotFound",
+export class PostSpaceNotFound extends Schema.TaggedErrorClass<PostSpaceNotFound>()(
+  "PostSpaceNotFound",
   {},
   { httpApiStatus: 404 },
 ) {}
 
 export class InvalidPoll extends Schema.TaggedErrorClass<InvalidPoll>()("InvalidPoll", {}, { httpApiStatus: 400 }) {}
 
-export class InvalidFlair extends Schema.TaggedErrorClass<InvalidFlair>()(
-  "InvalidFlair",
+export class InvalidFlair extends Schema.TaggedErrorClass<InvalidFlair>()("InvalidFlair", {}, { httpApiStatus: 400 }) {}
+
+export class ReviewConflict extends Schema.TaggedErrorClass<ReviewConflict>()("ReviewConflict", {}, { httpApiStatus: 409 }) {}
+
+export class PostWorkNotFound extends Schema.TaggedErrorClass<PostWorkNotFound>()(
+  "PostWorkNotFound",
   {},
-  { httpApiStatus: 400 },
+  { httpApiStatus: 404 },
 ) {}
 
 export class PostsGroup extends HttpApiGroup.make("posts")
   .add(
     HttpApiEndpoint.get("list", "/", {
       query: {
-        groupId: Schema.optional(Schema.String),
+        spaceId: Schema.optional(Schema.String),
         feed: Schema.optional(Schema.Literals(["home", "all"])),
         sort: Schema.optional(Schema.Literals(["hot", "new", "top"])),
+        workId: Schema.optional(Schema.String),
+        kind: Schema.optional(Schema.Literals(["review", "discussion"])),
         limit: Schema.optional(Schema.NumberFromString),
         offset: Schema.optional(Schema.NumberFromString),
       },
@@ -70,7 +78,7 @@ export class PostsGroup extends HttpApiGroup.make("posts")
     HttpApiEndpoint.get("search", "/search", {
       query: {
         q: Schema.String,
-        groupId: Schema.optional(Schema.String),
+        spaceId: Schema.optional(Schema.String),
         limit: Schema.optional(Schema.NumberFromString),
         offset: Schema.optional(Schema.NumberFromString),
       },
@@ -85,10 +93,11 @@ export class PostsGroup extends HttpApiGroup.make("posts")
     HttpApiEndpoint.post("create", "/", {
       payload: Schema.Struct({
         title: Schema.String,
-        type: Schema.optional(Schema.Literals(["text", "link", "image", "poll"])),
+        type: Schema.optional(Schema.Literals(["text", "link", "image", "poll", "review"])),
+        workId: Schema.optional(Schema.String),
         content: Schema.optional(PortableText),
         url: Schema.optional(Schema.String),
-        groupId: Schema.optional(Schema.String),
+        spaceId: Schema.optional(Schema.String),
         flairId: Schema.optional(Schema.String),
         nsfw: Schema.optional(Schema.Boolean),
         spoiler: Schema.optional(Schema.Boolean),
@@ -96,13 +105,7 @@ export class PostsGroup extends HttpApiGroup.make("posts")
         pollEndsAt: Schema.optional(Schema.DateFromString),
       }),
       success: Post,
-      error: [
-        PostForbidden,
-        PostGroupNotFound,
-        InvalidPoll,
-        InvalidFlair,
-        HttpApiError.InternalServerError,
-      ],
+      error: [PostForbidden, PostSpaceNotFound, InvalidPoll, InvalidFlair, ReviewConflict, PostWorkNotFound, HttpApiError.InternalServerError],
     }),
     HttpApiEndpoint.patch("update", "/:id", {
       params: { id: Schema.String },

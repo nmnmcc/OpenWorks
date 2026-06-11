@@ -12,3 +12,7 @@ tasks:
   start:
     desc: Start Next.js production server
     cmd: yarn next start
+
+  lint:
+    desc: Run ESLint
+    cmd: yarn eslint src/

@@ -1,8 +1,9 @@
 import { Effect, Layer } from "effect";
-import { HttpServerRequest } from "effect/unstable/http";
-import { AuthMiddleware, CurrentSession, CurrentUser, Unauthorized } from "../../interfaces/middlewares/auth";
-import { Auth } from "../../../auth/index";
 import { isNotNullish } from "effect/Predicate";
+import { HttpServerRequest } from "effect/unstable/http";
+
+import { Auth } from "../../../auth";
+import { AuthMiddleware, CurrentSession, CurrentUser, Unauthorized } from "../../interfaces/middlewares/auth";
 
 export const AuthMiddlewareLive = Layer.effect(
   AuthMiddleware,
@@ -16,7 +17,9 @@ export const AuthMiddlewareLive = Layer.effect(
 
         const result = yield* auth.api.getSession({ headers }).pipe(
           Effect.filterOrFail(isNotNullish),
-          Effect.mapError(() => new Unauthorized()),
+          Effect.catchTag("NoSuchElementError", () => Effect.fail(new Unauthorized())),
+          Effect.catchTag("API", () => Effect.fail(new Unauthorized())),
+          Effect.catchTag("Unknown", () => Effect.fail(new Unauthorized())),
         );
 
         return yield* next.pipe(

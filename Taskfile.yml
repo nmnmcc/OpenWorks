@@ -13,10 +13,14 @@ tasks:
     cmd: task --list-all
 
   dev:
-    desc: Start all dev servers
+    desc: Start frontend and backend dev servers
     deps:
       - frontend:dev
       - backend:dev
+
+  services:
+    desc: Start all dev services
+    cmd: devenv up --no-tui
 
   build:
     desc: Build all packages
@@ -26,6 +30,12 @@ tasks:
   typecheck:
     desc: Type check all packages
     cmd: yarn tsc -b --noEmit
+
+  lint:
+    desc: Lint all packages
+    deps:
+      - frontend:lint
+      - backend:lint
 
   format:
     desc: Format code with Prettier

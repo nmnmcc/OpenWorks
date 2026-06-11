@@ -1,40 +1,53 @@
-import { v7 } from "uuid";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq } from "drizzle-orm";
-import { Api, MessageEntry, MessageNotFound, MessageForbidden, RecipientNotFound, CurrentUser } from "../interfaces";
+import { v7 } from "uuid";
+
+import { Config } from "../../config";
 import { Database } from "../../database";
-import { messages } from "../../database/schema";
+import { messages } from "../../database/schema/message";
+import { Api } from "../interfaces";
+import { MessageEntry, MessageForbidden, MessageNotFound, RecipientNotFound } from "../interfaces/messages";
+import { CurrentUser } from "../interfaces/middlewares/auth";
 
 export const MessagesHandlers = HttpApiBuilder.group(
   Api,
   "messages",
   Effect.fn(function* (handlers) {
+    const config = yield* Config;
     const database = yield* Database;
 
     return handlers
-      .handle("inbox", () =>
+      .handle("inbox", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
+          const offset = query.offset ?? 0;
           const rows = yield* database.query.messages.findMany({
             where: {
               recipientId: user.id,
               deletedByRecipient: false,
             },
             orderBy: { createdAt: "desc" },
+            limit,
+            offset,
           });
           return rows.map((row) => new MessageEntry(row));
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
       )
-      .handle("sent", () =>
+      .handle("sent", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
+          const offset = query.offset ?? 0;
           const rows = yield* database.query.messages.findMany({
             where: {
               senderId: user.id,
               deletedBySender: false,
             },
             orderBy: { createdAt: "desc" },
+            limit,
+            offset,
           });
           return rows.map((row) => new MessageEntry(row));
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),

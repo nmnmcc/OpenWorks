@@ -25,6 +25,10 @@ tasks:
     desc: Open Drizzle Studio
     cmd: yarn drizzle-kit studio
 
+  lint:
+    desc: Run ESLint
+    cmd: yarn eslint src/
+
   cli:
     desc: Run the development CLI
     cmd: yarn run -T tsx src/cli/index.ts {{.CLI_ARGS}}

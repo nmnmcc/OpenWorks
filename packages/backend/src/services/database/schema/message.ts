@@ -1,5 +1,7 @@
-import { pgTable, text, uuid, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { boolean, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { v7 } from "uuid";
+
+import type { PortableTextContent } from "../../../libraries/portable-text";
 import { users } from "./auth";
 
 /**
@@ -17,7 +19,7 @@ export const messages = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     subject: text("subject").notNull(),
-    body: text("body").notNull(),
+    body: jsonb("body").$type<PortableTextContent>().notNull(),
     isRead: boolean("is_read").default(false).notNull(),
     deletedBySender: boolean("deleted_by_sender").default(false).notNull(),
     deletedByRecipient: boolean("deleted_by_recipient").default(false).notNull(),

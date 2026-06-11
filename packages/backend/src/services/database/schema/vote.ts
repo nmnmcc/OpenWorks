@@ -1,8 +1,9 @@
-import { pgTable, uuid, timestamp, integer, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { v7 } from "uuid";
+
 import { users } from "./auth";
-import { posts } from "./post";
 import { comments } from "./comment";
+import { posts } from "./post";
 
 /**
  * 用户对帖子或评论的赞/踩。postId 与 commentId 二选一指向投票目标；

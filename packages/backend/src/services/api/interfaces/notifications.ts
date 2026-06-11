@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
+
 import { AuthMiddleware } from "./middlewares/auth";
 
 export class NotificationEntry extends Schema.Class<NotificationEntry>("NotificationEntry")({
@@ -22,6 +23,10 @@ export class NotificationNotFound extends Schema.TaggedErrorClass<NotificationNo
 export class NotificationsGroup extends HttpApiGroup.make("notifications")
   .add(
     HttpApiEndpoint.get("list", "/", {
+      query: {
+        limit: Schema.optional(Schema.NumberFromString),
+        offset: Schema.optional(Schema.NumberFromString),
+      },
       success: Schema.Array(NotificationEntry),
       error: HttpApiError.InternalServerError,
     }),

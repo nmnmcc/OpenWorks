@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/unstable/httpapi";
+
 import { AuthMiddleware } from "./middlewares/auth";
 
 export class UserProfile extends Schema.Class<UserProfile>("UserProfile")({
@@ -12,10 +13,28 @@ export class UserProfile extends Schema.Class<UserProfile>("UserProfile")({
   createdAt: Schema.DateFromString,
 }) {}
 
+export class UserSearchResult extends Schema.Class<UserSearchResult>("UserSearchResult")({
+  hits: Schema.Array(UserProfile),
+  query: Schema.String,
+  estimatedTotalHits: Schema.Number,
+  processingTimeMs: Schema.Number,
+  limit: Schema.Number,
+  offset: Schema.Number,
+}) {}
+
 export class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()("UserNotFound", {}, { httpApiStatus: 404 }) {}
 
 export class UsersGroup extends HttpApiGroup.make("users")
   .add(
+    HttpApiEndpoint.get("search", "/search", {
+      query: {
+        q: Schema.String,
+        limit: Schema.optional(Schema.NumberFromString),
+        offset: Schema.optional(Schema.NumberFromString),
+      },
+      success: UserSearchResult,
+      error: HttpApiError.InternalServerError,
+    }),
     HttpApiEndpoint.get("me", "/me", {
       success: UserProfile,
       error: HttpApiError.InternalServerError,

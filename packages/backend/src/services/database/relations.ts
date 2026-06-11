@@ -1,14 +1,15 @@
 import { defineRelations } from "drizzle-orm";
-import * as schema from "./schema";
+
+import * as schema from "./schema/all";
 
 export const relations = defineRelations(schema, (r) => ({
   users: {
     sessions: r.many.sessions(),
     accounts: r.many.accounts(),
-    groupMembers: r.many.groupMembers(),
-    groupInvitations: r.many.groupInvitations({
+    spaceMembers: r.many.spaceMembers(),
+    spaceInvitations: r.many.spaceInvitations({
       from: r.users.id,
-      to: r.groupInvitations.invitedById,
+      to: r.spaceInvitations.invitedById,
     }),
     posts: r.many.posts({
       from: r.users.id,
@@ -19,21 +20,21 @@ export const relations = defineRelations(schema, (r) => ({
       to: r.comments.authorId,
     }),
     votes: r.many.votes(),
-    bans: r.many.groupBans({
+    bans: r.many.spaceBans({
       from: r.users.id,
-      to: r.groupBans.userId,
+      to: r.spaceBans.userId,
     }),
-    bansIssued: r.many.groupBans({
+    bansIssued: r.many.spaceBans({
       from: r.users.id,
-      to: r.groupBans.bannedById,
+      to: r.spaceBans.bannedById,
     }),
-    mutes: r.many.groupMutes({
+    mutes: r.many.spaceMutes({
       from: r.users.id,
-      to: r.groupMutes.userId,
+      to: r.spaceMutes.userId,
     }),
-    mutesIssued: r.many.groupMutes({
+    mutesIssued: r.many.spaceMutes({
       from: r.users.id,
-      to: r.groupMutes.mutedById,
+      to: r.spaceMutes.mutedById,
     }),
     userFlairs: r.many.userFlairs(),
     savedItems: r.many.savedItems(),
@@ -52,6 +53,22 @@ export const relations = defineRelations(schema, (r) => ({
     }),
     notifications: r.many.notifications(),
     pollVotes: r.many.pollVotes(),
+    createdWorks: r.many.works({
+      from: r.users.id,
+      to: r.works.createdById,
+    }),
+    workRatings: r.many.workRatings(),
+    libraryItems: r.many.libraryItems(),
+    workTagApplications: r.many.workTagApplications(),
+    shelves: r.many.shelves({
+      from: r.users.id,
+      to: r.shelves.ownerId,
+    }),
+    chapterProgress: r.many.chapterProgress(),
+    createdCreators: r.many.creators({
+      from: r.users.id,
+      to: r.creators.createdById,
+    }),
   },
   sessions: {
     user: r.one.users({
@@ -65,28 +82,28 @@ export const relations = defineRelations(schema, (r) => ({
       to: r.users.id,
     }),
   },
-  groups: {
+  spaces: {
     roles: r.many.roles(),
-    members: r.many.groupMembers(),
-    invitations: r.many.groupInvitations(),
+    members: r.many.spaceMembers(),
+    invitations: r.many.spaceInvitations(),
     posts: r.many.posts(),
     comments: r.many.comments(),
-    bans: r.many.groupBans(),
-    mutes: r.many.groupMutes(),
+    bans: r.many.spaceBans(),
+    mutes: r.many.spaceMutes(),
     postFlairs: r.many.postFlairs(),
     userFlairs: r.many.userFlairs(),
     reports: r.many.reports(),
-    rules: r.many.groupRules(),
+    rules: r.many.spaceRules(),
     modLog: r.many.modLog(),
     wikiPages: r.many.wikiPages(),
   },
   roles: {
-    group: r.one.groups({
-      from: r.roles.groupId,
-      to: r.groups.id,
+    space: r.one.spaces({
+      from: r.roles.spaceId,
+      to: r.spaces.id,
     }),
     rolePermissions: r.many.rolePermissions(),
-    members: r.many.groupMembers(),
+    members: r.many.spaceMembers(),
   },
   permissions: {
     rolePermissions: r.many.rolePermissions(),
@@ -101,66 +118,66 @@ export const relations = defineRelations(schema, (r) => ({
       to: r.permissions.id,
     }),
   },
-  groupMembers: {
-    group: r.one.groups({
-      from: r.groupMembers.groupId,
-      to: r.groups.id,
+  spaceMembers: {
+    space: r.one.spaces({
+      from: r.spaceMembers.spaceId,
+      to: r.spaces.id,
     }),
     user: r.one.users({
-      from: r.groupMembers.userId,
+      from: r.spaceMembers.userId,
       to: r.users.id,
     }),
     role: r.one.roles({
-      from: r.groupMembers.roleId,
+      from: r.spaceMembers.roleId,
       to: r.roles.id,
     }),
   },
-  groupInvitations: {
-    group: r.one.groups({
-      from: r.groupInvitations.groupId,
-      to: r.groups.id,
+  spaceInvitations: {
+    space: r.one.spaces({
+      from: r.spaceInvitations.spaceId,
+      to: r.spaces.id,
     }),
     role: r.one.roles({
-      from: r.groupInvitations.roleId,
+      from: r.spaceInvitations.roleId,
       to: r.roles.id,
     }),
     invitedBy: r.one.users({
-      from: r.groupInvitations.invitedById,
+      from: r.spaceInvitations.invitedById,
       to: r.users.id,
     }),
   },
-  groupBans: {
-    group: r.one.groups({
-      from: r.groupBans.groupId,
-      to: r.groups.id,
+  spaceBans: {
+    space: r.one.spaces({
+      from: r.spaceBans.spaceId,
+      to: r.spaces.id,
     }),
     user: r.one.users({
-      from: r.groupBans.userId,
+      from: r.spaceBans.userId,
       to: r.users.id,
     }),
     bannedBy: r.one.users({
-      from: r.groupBans.bannedById,
+      from: r.spaceBans.bannedById,
       to: r.users.id,
     }),
   },
-  groupMutes: {
-    group: r.one.groups({
-      from: r.groupMutes.groupId,
-      to: r.groups.id,
+  spaceMutes: {
+    space: r.one.spaces({
+      from: r.spaceMutes.spaceId,
+      to: r.spaces.id,
     }),
     user: r.one.users({
-      from: r.groupMutes.userId,
+      from: r.spaceMutes.userId,
       to: r.users.id,
     }),
     mutedBy: r.one.users({
-      from: r.groupMutes.mutedById,
+      from: r.spaceMutes.mutedById,
       to: r.users.id,
     }),
   },
   postFlairs: {
-    group: r.one.groups({
-      from: r.postFlairs.groupId,
-      to: r.groups.id,
+    space: r.one.spaces({
+      from: r.postFlairs.spaceId,
+      to: r.spaces.id,
     }),
     posts: r.many.posts(),
   },
@@ -169,9 +186,9 @@ export const relations = defineRelations(schema, (r) => ({
       from: r.posts.authorId,
       to: r.users.id,
     }),
-    group: r.one.groups({
-      from: r.posts.groupId,
-      to: r.groups.id,
+    space: r.one.spaces({
+      from: r.posts.spaceId,
+      to: r.spaces.id,
     }),
     flair: r.one.postFlairs({
       from: r.posts.flairId,
@@ -190,6 +207,10 @@ export const relations = defineRelations(schema, (r) => ({
       from: r.posts.id,
       to: r.polls.postId,
     }),
+    work: r.one.works({
+      from: r.posts.workId,
+      to: r.works.id,
+    }),
   },
   comments: {
     author: r.one.users({
@@ -204,9 +225,9 @@ export const relations = defineRelations(schema, (r) => ({
       from: r.comments.parentId,
       to: r.comments.id,
     }),
-    group: r.one.groups({
-      from: r.comments.groupId,
-      to: r.groups.id,
+    space: r.one.spaces({
+      from: r.comments.spaceId,
+      to: r.spaces.id,
     }),
     removedBy: r.one.users({
       from: r.comments.removedById,
@@ -235,9 +256,9 @@ export const relations = defineRelations(schema, (r) => ({
     }),
   },
   userFlairs: {
-    group: r.one.groups({
-      from: r.userFlairs.groupId,
-      to: r.groups.id,
+    space: r.one.spaces({
+      from: r.userFlairs.spaceId,
+      to: r.spaces.id,
     }),
     user: r.one.users({
       from: r.userFlairs.userId,
@@ -269,9 +290,9 @@ export const relations = defineRelations(schema, (r) => ({
     }),
   },
   reports: {
-    group: r.one.groups({
-      from: r.reports.groupId,
-      to: r.groups.id,
+    space: r.one.spaces({
+      from: r.reports.spaceId,
+      to: r.spaces.id,
     }),
     reporter: r.one.users({
       from: r.reports.reporterId,
@@ -290,16 +311,16 @@ export const relations = defineRelations(schema, (r) => ({
       to: r.users.id,
     }),
   },
-  groupRules: {
-    group: r.one.groups({
-      from: r.groupRules.groupId,
-      to: r.groups.id,
+  spaceRules: {
+    space: r.one.spaces({
+      from: r.spaceRules.spaceId,
+      to: r.spaces.id,
     }),
   },
   modLog: {
-    group: r.one.groups({
-      from: r.modLog.groupId,
-      to: r.groups.id,
+    space: r.one.spaces({
+      from: r.modLog.spaceId,
+      to: r.spaces.id,
     }),
     moderator: r.one.users({
       from: r.modLog.moderatorId,
@@ -323,9 +344,9 @@ export const relations = defineRelations(schema, (r) => ({
     }),
   },
   wikiPages: {
-    group: r.one.groups({
-      from: r.wikiPages.groupId,
-      to: r.groups.id,
+    space: r.one.spaces({
+      from: r.wikiPages.spaceId,
+      to: r.spaces.id,
     }),
     lastEditedBy: r.one.users({
       from: r.wikiPages.lastEditedById,
@@ -372,5 +393,164 @@ export const relations = defineRelations(schema, (r) => ({
       to: r.users.id,
     }),
   },
-  searchOutbox: {},
+  works: {
+    createdBy: r.one.users({
+      from: r.works.createdById,
+      to: r.users.id,
+    }),
+    targetWork: r.one.works({
+      from: r.works.targetWorkId,
+      to: r.works.id,
+    }),
+    variants: r.many.works({
+      from: r.works.id,
+      to: r.works.targetWorkId,
+    }),
+    revisions: r.many.workRevisions(),
+    credits: r.many.workCredits(),
+    tagApplications: r.many.workTagApplications(),
+    aliases: r.many.workAliases(),
+    ratings: r.many.workRatings(),
+    chapters: r.many.workChapters(),
+    libraryItems: r.many.libraryItems(),
+    externalRefs: r.many.workExternalRefs(),
+    systemRequirements: r.many.workSystemRequirements(),
+    shelfItems: r.many.shelfItems(),
+    posts: r.many.posts(),
+  },
+  workRevisions: {
+    work: r.one.works({
+      from: r.workRevisions.workId,
+      to: r.works.id,
+    }),
+    editedBy: r.one.users({
+      from: r.workRevisions.editedById,
+      to: r.users.id,
+    }),
+  },
+  creators: {
+    createdBy: r.one.users({
+      from: r.creators.createdById,
+      to: r.users.id,
+    }),
+    revisions: r.many.creatorRevisions(),
+    credits: r.many.workCredits(),
+  },
+  creatorRevisions: {
+    creator: r.one.creators({
+      from: r.creatorRevisions.creatorId,
+      to: r.creators.id,
+    }),
+    editedBy: r.one.users({
+      from: r.creatorRevisions.editedById,
+      to: r.users.id,
+    }),
+  },
+  workCredits: {
+    work: r.one.works({
+      from: r.workCredits.workId,
+      to: r.works.id,
+    }),
+    creator: r.one.creators({
+      from: r.workCredits.creatorId,
+      to: r.creators.id,
+    }),
+  },
+  workTags: {
+    applications: r.many.workTagApplications(),
+  },
+  workTagApplications: {
+    work: r.one.works({
+      from: r.workTagApplications.workId,
+      to: r.works.id,
+    }),
+    tag: r.one.workTags({
+      from: r.workTagApplications.tagId,
+      to: r.workTags.id,
+    }),
+    user: r.one.users({
+      from: r.workTagApplications.userId,
+      to: r.users.id,
+    }),
+  },
+  workAliases: {
+    work: r.one.works({
+      from: r.workAliases.workId,
+      to: r.works.id,
+    }),
+    createdBy: r.one.users({
+      from: r.workAliases.createdById,
+      to: r.users.id,
+    }),
+  },
+  workRatings: {
+    work: r.one.works({
+      from: r.workRatings.workId,
+      to: r.works.id,
+    }),
+    user: r.one.users({
+      from: r.workRatings.userId,
+      to: r.users.id,
+    }),
+  },
+  workChapters: {
+    work: r.one.works({
+      from: r.workChapters.workId,
+      to: r.works.id,
+    }),
+    progress: r.many.chapterProgress(),
+  },
+  chapterProgress: {
+    user: r.one.users({
+      from: r.chapterProgress.userId,
+      to: r.users.id,
+    }),
+    chapter: r.one.workChapters({
+      from: r.chapterProgress.chapterId,
+      to: r.workChapters.id,
+    }),
+  },
+  libraryItems: {
+    user: r.one.users({
+      from: r.libraryItems.userId,
+      to: r.users.id,
+    }),
+    work: r.one.works({
+      from: r.libraryItems.workId,
+      to: r.works.id,
+    }),
+    lastReadChapter: r.one.workChapters({
+      from: r.libraryItems.lastReadChapterId,
+      to: r.workChapters.id,
+    }),
+  },
+  shelves: {
+    owner: r.one.users({
+      from: r.shelves.ownerId,
+      to: r.users.id,
+    }),
+    items: r.many.shelfItems(),
+  },
+  shelfItems: {
+    shelf: r.one.shelves({
+      from: r.shelfItems.shelfId,
+      to: r.shelves.id,
+    }),
+    work: r.one.works({
+      from: r.shelfItems.workId,
+      to: r.works.id,
+    }),
+  },
+  workExternalRefs: {
+    work: r.one.works({
+      from: r.workExternalRefs.workId,
+      to: r.works.id,
+    }),
+  },
+  workSystemRequirements: {
+    work: r.one.works({
+      from: r.workSystemRequirements.workId,
+      to: r.works.id,
+    }),
+  },
 }));

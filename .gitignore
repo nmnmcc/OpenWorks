@@ -20,3 +20,7 @@ devenv.local.yaml
 .next
 
 *.tsbuildinfo
+
+/.dev
+
+.playwright*

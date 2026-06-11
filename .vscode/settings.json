@@ -1,4 +1,4 @@
 {
   "js/ts.tsdk.path": "node_modules/typescript/lib",
-  "cSpell.words": ["meilisearch"]
+  "cSpell.words": ["devenv", "meilisearch", "portabletext", "rezics", "Yieldable"]
 }

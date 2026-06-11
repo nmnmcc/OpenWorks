@@ -1,11 +1,16 @@
-import { v7 } from "uuid";
+import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq, sql } from "drizzle-orm";
-import { Api, Vote, VoteForbidden, VoteTargetNotFound, CurrentUser } from "../interfaces";
-import { Database } from "../../database";
+import { v7 } from "uuid";
+
 import { Authorization } from "../../authorization";
-import { votes, posts, comments } from "../../database/schema";
+import { Database } from "../../database";
+import { comments } from "../../database/schema/comment";
+import { posts } from "../../database/schema/post";
+import { votes } from "../../database/schema/vote";
+import { Api } from "../interfaces";
+import { CurrentUser } from "../interfaces/middlewares/auth";
+import { Vote, VoteForbidden, VoteTargetNotFound } from "../interfaces/votes";
 
 export const VotesHandlers = HttpApiBuilder.group(
   Api,
@@ -53,10 +58,10 @@ export const VotesHandlers = HttpApiBuilder.group(
             return yield* new VoteTargetNotFound();
           }
 
-          const groupId = target.groupId;
+          const spaceId = target.spaceId;
 
-          if (groupId) {
-            yield* authorization.check(user.id, groupId, {
+          if (spaceId) {
+            yield* authorization.check(user.id, spaceId, {
               action: "create",
               subject: "Vote",
             });

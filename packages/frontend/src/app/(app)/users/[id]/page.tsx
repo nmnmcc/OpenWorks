@@ -1,0 +1,145 @@
+"use client";
+
+import { userQuery } from "@/atoms/users";
+import { SectionBoundary } from "@/components/SectionBoundary";
+import { MessageComposeDialog } from "@/components/shared/MessageComposeDialog";
+import { TimeAgo } from "@/components/shared/TimeAgo";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { authClient } from "@/lib/auth-client";
+import { useT } from "@/lib/i18n/locale";
+import { useAtomSuspense } from "@effect/atom-react";
+import { MailIcon, PencilIcon } from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useState } from "react";
+
+function UserProfileView({ id }: { readonly id: string }) {
+  const [t] = useT();
+  const { data: session } = authClient.useSession();
+  const result = useAtomSuspense(userQuery(id));
+  const [composeOpen, setComposeOpen] = useState(false);
+
+  const user = result.value;
+  const isMe = session?.user.id === id;
+
+  return (
+    <Card className="overflow-hidden pt-0">
+      {user.banner !== null ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img alt="" className="h-32 w-full object-cover sm:h-44" src={user.banner} />
+      ) : (
+        <div className="bg-muted h-24" />
+      )}
+
+      <CardContent className="-mt-10 flex flex-col gap-3">
+        <div className="flex items-end justify-between gap-3">
+          <Avatar className="border-card size-20 border-4 text-xl" size="lg">
+            <AvatarImage alt={user.name} src={user.image ?? undefined} />
+            <AvatarFallback>{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          {isMe ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/settings">
+                <PencilIcon />
+                {t.users.editProfile}
+              </Link>
+            </Button>
+          ) : (
+            <Button onClick={() => setComposeOpen(true)} size="sm" variant="outline">
+              <MailIcon />
+              {t.users.sendMessage}
+            </Button>
+          )}
+        </div>
+
+        <div>
+          <h1 className="text-xl font-semibold wrap-anywhere">{user.displayName ?? user.name}</h1>
+          <p className="text-muted-foreground text-sm wrap-anywhere">@{user.name}</p>
+        </div>
+
+        <p className="text-sm wrap-anywhere">
+          {user.bio ?? <span className="text-muted-foreground">{t.users.noBio}</span>}
+        </p>
+
+        <p className="text-muted-foreground text-xs">
+          {t.users.joined} <TimeAgo date={user.createdAt} />
+        </p>
+      </CardContent>
+
+      <MessageComposeDialog onOpenChange={setComposeOpen} open={composeOpen} recipientId={id} />
+    </Card>
+  );
+}
+
+/**
+ * Mobile (<640px):
+ * +-----------------------------------+
+ * | [Banner h-32 / muted h-24]       |
+ * |-----------------------------------|
+ * | (Avatar -mt-10)  [Edit/Message]  |
+ * | Display Name                     |
+ * | @username                        |
+ * | Bio text                         |
+ * | Joined 3mo ago                   |
+ * +-----------------------------------+
+ *            w-full
+ *
+ * Tablet (640-1023px):
+ * +-------------------------------------------+
+ * | [Banner sm:h-44 / muted h-24]            |
+ * |-------------------------------------------|
+ * | (Avatar -mt-10)       [Edit / Message]    |
+ * | Display Name                              |
+ * | @username                                 |
+ * | Bio text                                  |
+ * | Joined 3mo ago                            |
+ * +-------------------------------------------+
+ *       w-full max-w-2xl mx-auto
+ *
+ * Desktop (1024-1535px):
+ * +--------------------------------------------------+
+ * |       [Banner sm:h-44 / muted h-24]              |
+ * |       -------------------------------------------|
+ * |       (Avatar -mt-10)       [Edit / Message]     |
+ * |       Display Name                               |
+ * |       @username                                  |
+ * |       Bio text                                   |
+ * |       Joined 3mo ago                             |
+ * +--------------------------------------------------+
+ *          w-full max-w-2xl mx-auto
+ *
+ * Ultra-wide (>=1536px):
+ * +--------------------------------------------------------------+
+ * |            [Banner sm:h-44 / muted h-24]                     |
+ * |            -------------------------------------------        |
+ * |            (Avatar -mt-10)       [Edit / Message]            |
+ * |            Display Name                                      |
+ * |            @username                                         |
+ * |            Bio text                                          |
+ * |            Joined 3mo ago                                    |
+ * +--------------------------------------------------------------+
+ *               w-full max-w-2xl mx-auto
+ *
+ * max-w-2xl (42rem) 居中容器。Card overflow-hidden，banner 撑满 Card 宽度。
+ * 行内宽度处置：头像行 = 头像（自带 shrink-0，固定 size-20）+ 操作按钮
+ * （自带 shrink-0，固定短标签），justify-between 推开两端，320px 下两者
+ * 合计仍小于行宽；显示名/@用户名/bio 均 wrap-anywhere（超长无空格串断行）。
+ * 头像 (size-20) 通过 -mt-10 上移与 banner 重叠，border-4 border-card 形成间隔。
+ * Banner 高度：<640px 时 h-32，>=640px 时 sm:h-44。
+ * 边界：banner 为 null → 灰色占位块 (h-24 bg-muted)。
+ *       自己的主页 → 显示"编辑"按钮（链接至 /settings）；他人 → "发消息"按钮。
+ *       bio 为 null → muted 占位文字。
+ */
+export default function UserProfilePage() {
+  const params = useParams<{ id: string }>();
+
+  return (
+    <div className="mx-auto w-full max-w-2xl">
+      <SectionBoundary>
+        <UserProfileView id={params.id} />
+      </SectionBoundary>
+    </div>
+  );
+}

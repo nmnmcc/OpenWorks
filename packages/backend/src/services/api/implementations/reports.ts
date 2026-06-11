@@ -1,16 +1,22 @@
-import { v7 } from "uuid";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq } from "drizzle-orm";
-import { Api, ReportEntry, ReportNotFound, ReportForbidden, ReportTargetNotFound, CurrentUser } from "../interfaces";
-import { Database } from "../../database";
+import { v7 } from "uuid";
+
 import { Authorization } from "../../authorization";
-import { reports, modLog } from "../../database/schema";
+import { Config } from "../../config";
+import { Database } from "../../database";
+import { modLog } from "../../database/schema/moderation-log";
+import { reports } from "../../database/schema/report";
+import { Api } from "../interfaces";
+import { CurrentUser } from "../interfaces/middlewares/auth";
+import { ReportEntry, ReportForbidden, ReportNotFound, ReportTargetNotFound } from "../interfaces/reports";
 
 export const ReportsHandlers = HttpApiBuilder.group(
   Api,
   "reports",
   Effect.fn(function* (handlers) {
+    const config = yield* Config;
     const database = yield* Database;
     const authorization = yield* Authorization;
 
@@ -33,19 +39,19 @@ export const ReportsHandlers = HttpApiBuilder.group(
             return yield* new ReportTargetNotFound();
           }
 
-          const groupId = target?.groupId ?? null;
+          const spaceId = target?.spaceId ?? null;
 
-          if (!groupId) {
+          if (!spaceId) {
             return yield* new ReportForbidden();
           }
 
-          const group = yield* database.query.groups.findFirst({
-            where: { id: groupId },
+          const space = yield* database.query.spaces.findFirst({
+            where: { id: spaceId },
           });
-          if (group && group.visibility === "private") {
-            const membership = yield* database.query.groupMembers.findFirst({
+          if (space && space.visibility === "private") {
+            const membership = yield* database.query.spaceMembers.findFirst({
               where: {
-                groupId,
+                spaceId,
                 userId: user.id,
               },
             });
@@ -58,7 +64,7 @@ export const ReportsHandlers = HttpApiBuilder.group(
             .insert(reports)
             .values({
               id: v7(),
-              groupId,
+              spaceId,
               reporterId: user.id,
               postId: payload.postId,
               commentId: payload.commentId,
@@ -71,13 +77,20 @@ export const ReportsHandlers = HttpApiBuilder.group(
       .handle("list", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          yield* authorization.check(user.id, query.groupId, {
+          yield* authorization.check(user.id, query.spaceId, {
             action: "read",
             subject: "Report",
           });
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
+          const offset = query.offset ?? 0;
           const rows = yield* database.query.reports.findMany({
-            where: query.status ? { groupId: query.groupId, status: query.status } : { groupId: query.groupId },
+            where: {
+              spaceId: query.spaceId,
+              status: query.status,
+            },
             orderBy: { createdAt: "desc" },
+            limit,
+            offset,
           });
           return rows.map((row) => new ReportEntry(row));
         }).pipe(
@@ -98,7 +111,7 @@ export const ReportsHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new ReportNotFound();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
             subject: "Report",
           });
@@ -113,7 +126,7 @@ export const ReportsHandlers = HttpApiBuilder.group(
             .returning();
           yield* database.insert(modLog).values({
             id: v7(),
-            groupId: existing.groupId,
+            spaceId: existing.spaceId,
             moderatorId: user.id,
             action: "report_resolve",
             targetType: "report",

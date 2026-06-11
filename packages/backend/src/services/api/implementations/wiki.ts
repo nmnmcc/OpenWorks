@@ -1,38 +1,91 @@
-import { v7 } from "uuid";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
-import { eq } from "drizzle-orm";
-import {
-  Api,
-  WikiPageEntry,
-  WikiRevisionEntry,
-  WikiPageNotFound,
-  WikiForbidden,
-  WikiSlugConflict,
-  CurrentUser,
-} from "../interfaces";
-import { Database } from "../../database";
+import { v7 } from "uuid";
+
 import { Authorization } from "../../authorization";
-import { wikiPages, wikiRevisions } from "../../database/schema";
+import { Config } from "../../config";
+import { Database } from "../../database";
+import { wikiPages, wikiRevisions } from "../../database/schema/wiki";
+import { Search } from "../../search";
+import { Api } from "../interfaces";
+import { CurrentUser } from "../interfaces/middlewares/auth";
+import {
+  WikiForbidden,
+  WikiPageEntry,
+  WikiPageNotFound,
+  WikiPageSearchResult,
+  WikiRevisionEntry,
+  WikiSlugConflict,
+} from "../interfaces/wiki";
 
 export const WikiHandlers = HttpApiBuilder.group(
   Api,
   "wiki",
   Effect.fn(function* (handlers) {
+    const config = yield* Config;
     const database = yield* Database;
     const authorization = yield* Authorization;
+    const search = yield* Search;
 
     return handlers
+      .handle("search", ({ query }) =>
+        Effect.gen(function* () {
+          const limit = query.limit ?? config.pagination.searchDefaultLimit;
+          const offset = query.offset ?? 0;
+
+          const result = yield* search.searchWikiPages({ q: query.q, spaceId: query.spaceId, limit, offset });
+
+          const ids = result.hits.map((hit) => hit.id);
+
+          if (ids.length === 0) {
+            return new WikiPageSearchResult({
+              hits: [],
+              query: result.query,
+              estimatedTotalHits: result.estimatedTotalHits ?? 0,
+              processingTimeMs: result.processingTimeMs,
+              limit,
+              offset,
+            });
+          }
+
+          const rows = yield* database.query.wikiPages.findMany({
+            where: { id: { in: ids } },
+          });
+
+          const rowMap = new Map(rows.map((row) => [row.id, row]));
+          const hits = ids
+            .map((id) => rowMap.get(id))
+            .filter((row): row is (typeof rows)[number] => row !== undefined)
+            .map((row) => new WikiPageEntry(row));
+
+          return new WikiPageSearchResult({
+            hits,
+            query: result.query,
+            estimatedTotalHits: result.estimatedTotalHits ?? 0,
+            processingTimeMs: result.processingTimeMs,
+            limit,
+            offset,
+          });
+        }).pipe(
+          Effect.catchTag("UnknownError", () => new HttpApiError.InternalServerError()),
+          Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),
+        ),
+      )
       .handle("listPages", ({ query }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          yield* authorization.check(user.id, query.groupId, {
+          yield* authorization.check(user.id, query.spaceId, {
             action: "read",
             subject: "WikiPage",
           });
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
+          const offset = query.offset ?? 0;
           const rows = yield* database.query.wikiPages.findMany({
-            where: { groupId: query.groupId },
+            where: { spaceId: query.spaceId },
             orderBy: { title: "asc" },
+            limit,
+            offset,
           });
           return rows.map((row) => new WikiPageEntry(row));
         }).pipe(
@@ -53,7 +106,7 @@ export const WikiHandlers = HttpApiBuilder.group(
             return yield* new WikiPageNotFound();
           }
           const user = yield* CurrentUser;
-          yield* authorization.check(user.id, row.groupId, {
+          yield* authorization.check(user.id, row.spaceId, {
             action: "read",
             subject: "WikiPage",
           });
@@ -70,13 +123,13 @@ export const WikiHandlers = HttpApiBuilder.group(
       .handle("createPage", ({ payload }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          yield* authorization.check(user.id, payload.groupId, {
+          yield* authorization.check(user.id, payload.spaceId, {
             action: "create",
             subject: "WikiPage",
           });
           const existing = yield* database.query.wikiPages.findFirst({
             where: {
-              groupId: payload.groupId,
+              spaceId: payload.spaceId,
               slug: payload.slug,
             },
           });
@@ -87,7 +140,7 @@ export const WikiHandlers = HttpApiBuilder.group(
             .insert(wikiPages)
             .values({
               id: v7(),
-              groupId: payload.groupId,
+              spaceId: payload.spaceId,
               slug: payload.slug,
               title: payload.title,
               content: payload.content,
@@ -119,7 +172,7 @@ export const WikiHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new WikiPageNotFound();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "update",
             subject: "WikiPage",
           });
@@ -160,7 +213,7 @@ export const WikiHandlers = HttpApiBuilder.group(
           if (!existing) {
             return yield* new WikiPageNotFound();
           }
-          yield* authorization.check(user.id, existing.groupId, {
+          yield* authorization.check(user.id, existing.spaceId, {
             action: "manage",
             subject: "WikiPage",
           });
@@ -174,7 +227,7 @@ export const WikiHandlers = HttpApiBuilder.group(
           Effect.catchTag("SubjectDetectionError", () => new HttpApiError.InternalServerError()),
         ),
       )
-      .handle("listRevisions", ({ params }) =>
+      .handle("listRevisions", ({ params, query }) =>
         Effect.gen(function* () {
           const page = yield* database.query.wikiPages.findFirst({
             where: { id: params.id },
@@ -183,13 +236,17 @@ export const WikiHandlers = HttpApiBuilder.group(
             return yield* new WikiPageNotFound();
           }
           const user = yield* CurrentUser;
-          yield* authorization.check(user.id, page.groupId, {
+          yield* authorization.check(user.id, page.spaceId, {
             action: "read",
             subject: "WikiPage",
           });
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
+          const offset = query.offset ?? 0;
           const rows = yield* database.query.wikiRevisions.findMany({
             where: { pageId: params.id },
             orderBy: { createdAt: "desc" },
+            limit,
+            offset,
           });
           return rows.map((row) => new WikiRevisionEntry(row));
         }).pipe(
