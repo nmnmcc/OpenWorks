@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 import { v7 } from "uuid";
 
@@ -7,7 +7,7 @@ import { Authorization } from "../../authorization";
 import { Database } from "../../database";
 import { spaceRules } from "../../database/schema/space-rule";
 import { Api } from "../interfaces";
-import { CurrentUser } from "../interfaces/middlewares/auth";
+import { CurrentUser, CurrentUserOption } from "../interfaces/middlewares/auth";
 import { RuleForbidden, RuleNotFound, SpaceRuleEntry } from "../interfaces/rules";
 
 export const RulesHandlers = HttpApiBuilder.group(
@@ -20,17 +20,20 @@ export const RulesHandlers = HttpApiBuilder.group(
     return handlers
       .handle("list", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const space = yield* database.query.spaces.findFirst({
             where: { id: query.spaceId },
           });
           if (space && space.visibility === "private") {
-            const membership = yield* database.query.spaceMembers.findFirst({
-              where: {
-                spaceId: query.spaceId,
-                userId: user.id,
-              },
-            });
+            const membership =
+              userId === undefined
+                ? undefined
+                : yield* database.query.spaceMembers.findFirst({
+                    where: {
+                      spaceId: query.spaceId,
+                      userId,
+                    },
+                  });
             if (!membership) {
               return yield* new RuleForbidden();
             }

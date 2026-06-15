@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
 import { PortableText } from "../../../libraries/portable-text";
-import { AuthMiddleware } from "./middlewares/auth";
+import { AuthMiddleware, OptionalAuthMiddleware } from "./middlewares/auth";
 
 export class Work extends Schema.Class<Work>("Work")({
   id: Schema.String,
@@ -107,6 +107,14 @@ export class WorkSystemRequirementEntry extends Schema.Class<WorkSystemRequireme
   notes: Schema.NullOr(Schema.String),
 }) {}
 
+export class WorkSpaceEntry extends Schema.Class<WorkSpaceEntry>("WorkSpaceEntry")({
+  id: Schema.String,
+  name: Schema.String,
+  slug: Schema.String,
+  icon: Schema.NullOr(Schema.String),
+  memberCount: Schema.Number,
+}) {}
+
 export class WorkSearchResult extends Schema.Class<WorkSearchResult>("WorkSearchResult")({
   hits: Schema.Array(Work),
   query: Schema.String,
@@ -162,7 +170,7 @@ export class WorksGroup extends HttpApiGroup.make("works")
       },
       success: Schema.Array(Work),
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("search", "/search", {
       query: {
         q: Schema.String,
@@ -172,12 +180,12 @@ export class WorksGroup extends HttpApiGroup.make("works")
       },
       success: WorkSearchResult,
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("getById", "/:id", {
       params: { id: Schema.String },
       success: Work,
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("create", "/", {
       payload: Schema.Struct({
         type: Schema.Literals(["book", "movie", "tv", "game"]),
@@ -198,7 +206,7 @@ export class WorksGroup extends HttpApiGroup.make("works")
       }),
       success: Work,
       error: [InvalidWorkPayload, WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.patch("update", "/:id", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -215,16 +223,17 @@ export class WorksGroup extends HttpApiGroup.make("works")
         platforms: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
         website: Schema.optional(Schema.NullOr(Schema.String)),
         nsfw: Schema.optional(Schema.Boolean),
+        targetWorkId: Schema.optional(Schema.NullOr(Schema.String)),
         reason: Schema.optional(Schema.String),
       }),
       success: Work,
-      error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+      error: [WorkNotFound, InvalidWorkPayload, HttpApiError.InternalServerError],
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("delete", "/:id", {
       params: { id: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [WorkNotFound, WorkForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("getRevisions", "/:id/revisions", {
       params: { id: Schema.String },
       query: {
@@ -233,17 +242,26 @@ export class WorksGroup extends HttpApiGroup.make("works")
       },
       success: Schema.Array(WorkRevisionEntry),
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("getVariants", "/:id/variants", {
       params: { id: Schema.String },
       success: Schema.Array(Work),
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
+    HttpApiEndpoint.get("getSpaces", "/:id/spaces", {
+      params: { id: Schema.String },
+      query: {
+        limit: Schema.optional(Schema.NumberFromString),
+        offset: Schema.optional(Schema.NumberFromString),
+      },
+      success: Schema.Array(WorkSpaceEntry),
+      error: [WorkNotFound, HttpApiError.InternalServerError],
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("getCredits", "/:id/credits", {
       params: { id: Schema.String },
       success: Schema.Array(WorkCreditEntry),
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.put("setCredits", "/:id/credits", {
       params: { id: Schema.String },
       payload: Schema.Array(
@@ -255,12 +273,12 @@ export class WorksGroup extends HttpApiGroup.make("works")
       ),
       success: Schema.Array(WorkCreditEntry),
       error: [WorkNotFound, InvalidCredits, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("getMyRating", "/:id/rating", {
       params: { id: Schema.String },
       success: Schema.NullOr(WorkRatingEntry),
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.put("setRating", "/:id/rating", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -268,17 +286,17 @@ export class WorksGroup extends HttpApiGroup.make("works")
       }),
       success: WorkRatingEntry,
       error: [WorkNotFound, InvalidWorkPayload, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("deleteRating", "/:id/rating", {
       params: { id: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("getTags", "/:id/tags", {
       params: { id: Schema.String },
       success: Schema.Array(WorkTagEntry),
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("addTag", "/:id/tags", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -286,12 +304,12 @@ export class WorksGroup extends HttpApiGroup.make("works")
       }),
       success: WorkTagEntry,
       error: [WorkNotFound, TagConflict, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("removeTag", "/:id/tags/:tagId", {
       params: { id: Schema.String, tagId: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("searchTags", "/tags", {
       query: {
         q: Schema.optional(Schema.String),
@@ -299,12 +317,12 @@ export class WorksGroup extends HttpApiGroup.make("works")
       },
       success: Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("getAliases", "/:id/aliases", {
       params: { id: Schema.String },
       success: Schema.Array(WorkAliasEntry),
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("addAlias", "/:id/aliases", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -313,17 +331,17 @@ export class WorksGroup extends HttpApiGroup.make("works")
       }),
       success: WorkAliasEntry,
       error: [WorkNotFound, AliasConflict, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("removeAlias", "/:id/aliases/:aliasId", {
       params: { id: Schema.String, aliasId: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("getChapters", "/:id/chapters", {
       params: { id: Schema.String },
       success: Schema.Array(WorkChapterEntry),
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("createChapter", "/:id/chapters", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -333,12 +351,12 @@ export class WorksGroup extends HttpApiGroup.make("works")
       }),
       success: WorkChapterDetail,
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("getChapter", "/chapters/:chapterId", {
       params: { chapterId: Schema.String },
       success: WorkChapterDetail,
       error: [ChapterNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.patch("updateChapter", "/chapters/:chapterId", {
       params: { chapterId: Schema.String },
       payload: Schema.Struct({
@@ -348,27 +366,27 @@ export class WorksGroup extends HttpApiGroup.make("works")
       }),
       success: WorkChapterDetail,
       error: [ChapterNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("deleteChapter", "/chapters/:chapterId", {
       params: { chapterId: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [ChapterNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("markChapterRead", "/chapters/:chapterId/read", {
       params: { chapterId: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [ChapterNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("unmarkChapterRead", "/chapters/:chapterId/read", {
       params: { chapterId: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [ChapterNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("getRequirements", "/:id/requirements", {
       params: { id: Schema.String },
       success: Schema.Array(WorkSystemRequirementEntry),
       error: [WorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.put("setRequirements", "/:id/requirements", {
       params: { id: Schema.String },
       payload: Schema.Array(
@@ -385,7 +403,6 @@ export class WorksGroup extends HttpApiGroup.make("works")
       ),
       success: Schema.Array(WorkSystemRequirementEntry),
       error: [WorkNotFound, InvalidWorkPayload, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/works") {}

@@ -1,13 +1,16 @@
 "use client";
 
 import { Keys } from "@/atoms/keys";
-import { updateWorkAtom, workAliasesQuery, workChaptersQuery, workCreditsQuery, workQuery, workRequirementsQuery, workRevisionsQuery } from "@/atoms/works";
+import { deleteWorkAtom, updateWorkAtom, workAliasesQuery, workChaptersQuery, workCreditsQuery, workQuery, workRequirementsQuery, workRevisionsQuery, workTagsQuery } from "@/atoms/works";
 import { SectionBoundary } from "@/components/SectionBoundary";
 import { AliasEditor } from "@/components/library/AliasEditor";
 import { ChapterListEditor } from "@/components/library/ChapterListEditor";
 import { CreditsEditor } from "@/components/library/CreditsEditor";
 import { RequirementsEditor } from "@/components/library/RequirementsEditor";
+import { TagEditor } from "@/components/library/TagEditor";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { PortableTextEditor } from "@/components/shared/PortableTextEditor";
+import { WorkPicker } from "@/components/shared/WorkPicker";
 import { toPortableTextContent } from "@/lib/portable-text";
 import { TimeAgo } from "@/components/shared/TimeAgo";
 import { UserLink } from "@/components/shared/UserLink";
@@ -37,6 +40,7 @@ function EditWorkForm({ id }: { readonly id: string }) {
   const [seasonCount, setSeasonCount] = useState(work.seasonCount?.toString() ?? "");
   const [episodeCount, setEpisodeCount] = useState(work.episodeCount?.toString() ?? "");
   const [website, setWebsite] = useState(work.website ?? "");
+  const [targetWorkId, setTargetWorkId] = useState<string | undefined>(work.targetWorkId ?? undefined);
   const [description, setDescription] = useState<ReadonlyArray<unknown> | undefined>(work.description ?? undefined);
   const [reason, setReason] = useState("");
 
@@ -55,6 +59,7 @@ function EditWorkForm({ id }: { readonly id: string }) {
           seasonCount: seasonCount ? parseInt(seasonCount) : undefined,
           episodeCount: episodeCount ? parseInt(episodeCount) : undefined,
           website: website || undefined,
+          targetWorkId: targetWorkId ?? null,
           description: toPortableTextContent(description),
           reason: reason || undefined,
         },
@@ -122,6 +127,10 @@ function EditWorkForm({ id }: { readonly id: string }) {
           <Input onChange={(e) => setWebsite(e.target.value)} value={website} />
         </div>
         <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">{t.library.variant} — {t.library.mainWork}</span>
+          <WorkPicker onValueChange={setTargetWorkId} placeholder={t.library.mainWork} value={targetWorkId} />
+        </div>
+        <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">{t.library.overview}</span>
           <PortableTextEditor initialValue={work.description ?? undefined} onChange={setDescription} />
         </div>
@@ -155,6 +164,13 @@ function EditWorkForm({ id }: { readonly id: string }) {
         </SectionBoundary>
       </section>
 
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">{t.library.tags}</h2>
+        <SectionBoundary>
+          <TagEditorSection workId={id} />
+        </SectionBoundary>
+      </section>
+
       {work.type === "game" && (
         <section className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">{t.library.requirements}</h2>
@@ -170,6 +186,8 @@ function EditWorkForm({ id }: { readonly id: string }) {
           <RevisionHistory workId={id} />
         </SectionBoundary>
       </section>
+
+      <DeleteWorkSection workId={id} />
     </div>
   );
 }
@@ -192,6 +210,47 @@ function ChapterEditorSection({ workId }: { readonly workId: string }) {
 function RequirementsEditorSection({ workId }: { readonly workId: string }) {
   const result = useAtomSuspense(workRequirementsQuery(workId));
   return <RequirementsEditor requirements={result.value} workId={workId} />;
+}
+
+function TagEditorSection({ workId }: { readonly workId: string }) {
+  const result = useAtomSuspense(workTagsQuery(workId));
+  return <TagEditor tags={result.value} workId={workId} />;
+}
+
+function DeleteWorkSection({ workId }: { readonly workId: string }) {
+  const [t] = useT();
+  const router = useRouter();
+  const deleteWork = useAtomSet(deleteWorkAtom, { mode: "promise" });
+  const [isConfirmOpen, setConfirmOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="text-destructive text-lg font-semibold">{t.common.delete}</h2>
+      <Button
+        disabled={isPending}
+        onClick={() => setConfirmOpen(true)}
+        size="sm"
+        variant="destructive"
+      >
+        {t.common.delete}
+      </Button>
+      <ConfirmDialog
+        confirmLabel={t.common.delete}
+        description={t.post.deleteConfirmBody}
+        destructive
+        onConfirm={() => {
+          startTransition(async () => {
+            await deleteWork({ params: { id: workId }, reactivityKeys: [Keys.works] });
+            router.push("/library");
+          });
+        }}
+        onOpenChange={(open) => setConfirmOpen(open)}
+        open={isConfirmOpen}
+        title={`${t.common.delete}?`}
+      />
+    </section>
+  );
 }
 
 function RevisionHistory({ workId }: { readonly workId: string }) {

@@ -22,3 +22,4 @@ export * from "./work-chapter";
 export * from "./library-item";
 export * from "./shelf";
 export * from "./work-system-requirement";
+export * from "./space-work";

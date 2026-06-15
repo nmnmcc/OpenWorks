@@ -1,25 +1,50 @@
 "use client";
 
 import { Keys } from "@/atoms/keys";
+import { postComposeDialogAtom } from "@/atoms/post-compose-dialog";
 import { workPostsPageQuery } from "@/atoms/posts";
-import { setRatingAtom, workChaptersQuery, workCreditsQuery, workQuery, workRequirementsQuery, workTagsQuery, workVariantsQuery } from "@/atoms/works";
-import { SectionBoundary } from "@/components/SectionBoundary";
+import {
+  deleteRatingAtom,
+  setRatingAtom,
+  workChaptersQuery,
+  workCreditsQuery,
+  workQuery,
+  workRatingQuery,
+  workRequirementsQuery,
+  workSpacesQuery,
+  workTagsQuery,
+  workVariantsQuery,
+} from "@/atoms/works";
 import { LibraryStatusControl } from "@/components/library/LibraryStatusControl";
 import { RatingStars } from "@/components/library/RatingStars";
 import { ShelfPickerMenu } from "@/components/library/ShelfPickerMenu";
 import { WorkCard } from "@/components/library/WorkCard";
 import { WorkTagChips } from "@/components/library/WorkTagChips";
 import { PostCard } from "@/components/post/PostCard";
+import { SectionBoundary } from "@/components/SectionBoundary";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PagedList } from "@/components/shared/PagedList";
 import { PortableTextView } from "@/components/shared/PortableTextView";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "@/lib/i18n/locale";
+import { cn } from "@/lib/utils";
 import { useAtomSet, useAtomSuspense } from "@effect/atom-react";
-import { BookOpenIcon, CheckIcon, ExternalLinkIcon, FilmIcon, GamepadIcon, MessageSquareIcon, PencilIcon, TvIcon } from "lucide-react";
+import {
+  BookOpenIcon,
+  CheckIcon,
+  ExternalLinkIcon,
+  FilmIcon,
+  GamepadIcon,
+  MessageSquareIcon,
+  PencilIcon,
+  PlusIcon,
+  TvIcon,
+  XIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useTransition } from "react";
@@ -52,9 +77,7 @@ function WorkHeader({ id }: { readonly id: string }) {
 
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <h1 className="text-2xl font-bold wrap-anywhere">{work.title}</h1>
-        {work.originalTitle && (
-          <p className="text-muted-foreground text-sm wrap-anywhere">{work.originalTitle}</p>
-        )}
+        {work.originalTitle && <p className="text-muted-foreground text-sm wrap-anywhere">{work.originalTitle}</p>}
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{t.library.type[work.type as keyof typeof t.library.type] ?? work.type}</Badge>
           {year && <span className="text-muted-foreground text-sm">{year}</span>}
@@ -99,18 +122,43 @@ function WorkHeader({ id }: { readonly id: string }) {
 }
 
 function MyRating({ workId }: { readonly workId: string }) {
+  const result = useAtomSuspense(workRatingQuery(workId));
   const setRating = useAtomSet(setRatingAtom, { mode: "promise" });
+  const deleteRating = useAtomSet(deleteRatingAtom, { mode: "promise" });
   const [isPending, startTransition] = useTransition();
+  const currentValue = result.value?.value as number | undefined;
 
   return (
-    <RatingStars
-      className={isPending ? "pointer-events-none opacity-50" : undefined}
-      onValueChange={(value) => {
-        startTransition(async () => {
-          await setRating({ params: { id: workId }, payload: { value }, reactivityKeys: [Keys.workRating(workId), Keys.work(workId)] });
-        });
-      }}
-    />
+    <div className={cn("flex items-center gap-1", isPending && "pointer-events-none opacity-50")}>
+      <RatingStars
+        onValueChange={(value) => {
+          startTransition(async () => {
+            await setRating({
+              params: { id: workId },
+              payload: { value },
+              reactivityKeys: [Keys.workRating(workId), Keys.work(workId)],
+            });
+          });
+        }}
+        value={currentValue}
+      />
+      {currentValue !== undefined && (
+        <Button
+          onClick={() => {
+            startTransition(async () => {
+              await deleteRating({
+                params: { id: workId },
+                reactivityKeys: [Keys.workRating(workId), Keys.work(workId)],
+              });
+            });
+          }}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <XIcon className="size-3" />
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -134,16 +182,51 @@ function OverviewTab({ id }: { readonly id: string }) {
       <Card className="flex flex-col gap-2 p-4">
         <h3 className="text-sm font-medium">{t.library.overview}</h3>
         <div className="text-muted-foreground grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-          {work.isbn && <><span>{t.library.isbn}</span><span>{work.isbn}</span></>}
-          {work.pageCount && <><span>{t.library.pageCount}</span><span>{work.pageCount}</span></>}
-          {work.runtimeMinutes && <><span>{t.library.runtime}</span><span>{t.library.runtimeMinutes(work.runtimeMinutes)}</span></>}
-          {work.seasonCount && <><span>{t.library.seasons}</span><span>{work.seasonCount}</span></>}
-          {work.episodeCount && <><span>{t.library.episodes}</span><span>{work.episodeCount}</span></>}
-          {work.platforms && work.platforms.length > 0 && <><span>{t.library.platforms}</span><span>{work.platforms.join(", ")}</span></>}
+          {work.isbn && (
+            <>
+              <span>{t.library.isbn}</span>
+              <span>{work.isbn}</span>
+            </>
+          )}
+          {work.pageCount && (
+            <>
+              <span>{t.library.pageCount}</span>
+              <span>{work.pageCount}</span>
+            </>
+          )}
+          {work.runtimeMinutes && (
+            <>
+              <span>{t.library.runtime}</span>
+              <span>{t.library.runtimeMinutes(work.runtimeMinutes)}</span>
+            </>
+          )}
+          {work.seasonCount && (
+            <>
+              <span>{t.library.seasons}</span>
+              <span>{work.seasonCount}</span>
+            </>
+          )}
+          {work.episodeCount && (
+            <>
+              <span>{t.library.episodes}</span>
+              <span>{work.episodeCount}</span>
+            </>
+          )}
+          {work.platforms && work.platforms.length > 0 && (
+            <>
+              <span>{t.library.platforms}</span>
+              <span>{work.platforms.join(", ")}</span>
+            </>
+          )}
           {work.website && (
             <>
               <span>{t.library.website}</span>
-              <a className="text-info-foreground truncate underline" href={work.website} rel="noreferrer noopener" target="_blank">
+              <a
+                className="text-info-foreground truncate underline"
+                href={work.website}
+                rel="noreferrer noopener"
+                target="_blank"
+              >
                 {work.website} <ExternalLinkIcon className="inline size-3" />
               </a>
             </>
@@ -156,6 +239,38 @@ function OverviewTab({ id }: { readonly id: string }) {
           <RequirementsSection workId={id} />
         </SectionBoundary>
       )}
+
+      <SectionBoundary>
+        <RelatedSpacesSection workId={id} />
+      </SectionBoundary>
+    </div>
+  );
+}
+
+function RelatedSpacesSection({ workId }: { readonly workId: string }) {
+  const [t] = useT();
+  const result = useAtomSuspense(workSpacesQuery(workId));
+  if (result.value.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-sm font-medium">{t.library.relatedSpaces}</h3>
+      <div className="flex flex-wrap gap-2">
+        {result.value.map((space) => (
+          <Link
+            className="hover:bg-accent flex min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 transition-colors"
+            href={`/spaces/${space.id}`}
+            key={space.id}
+          >
+            <Avatar size="sm">
+              <AvatarImage alt={space.name} src={space.icon ?? undefined} />
+              <AvatarFallback>{space.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <span className="min-w-0 truncate text-sm font-medium">{space.name}</span>
+            <span className="text-muted-foreground shrink-0 text-xs">{t.spaces.members(space.memberCount)}</span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
@@ -209,12 +324,34 @@ function RequirementsSection({ workId }: { readonly workId: string }) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {reqs.map((req) => (
               <div className="flex flex-col gap-1" key={req.tier}>
-                <span className="text-muted-foreground text-xs font-medium">{t.library.requirement[req.tier as keyof typeof t.library.requirement] ?? req.tier}</span>
-                {req.os && <span className="text-xs">{t.library.requirement.os}: {req.os}</span>}
-                {req.cpu && <span className="text-xs">{t.library.requirement.cpu}: {req.cpu}</span>}
-                {req.memory && <span className="text-xs">{t.library.requirement.memory}: {req.memory}</span>}
-                {req.graphics && <span className="text-xs">{t.library.requirement.graphics}: {req.graphics}</span>}
-                {req.storage && <span className="text-xs">{t.library.requirement.storage}: {req.storage}</span>}
+                <span className="text-muted-foreground text-xs font-medium">
+                  {t.library.requirement[req.tier as keyof typeof t.library.requirement] ?? req.tier}
+                </span>
+                {req.os && (
+                  <span className="text-xs">
+                    {t.library.requirement.os}: {req.os}
+                  </span>
+                )}
+                {req.cpu && (
+                  <span className="text-xs">
+                    {t.library.requirement.cpu}: {req.cpu}
+                  </span>
+                )}
+                {req.memory && (
+                  <span className="text-xs">
+                    {t.library.requirement.memory}: {req.memory}
+                  </span>
+                )}
+                {req.graphics && (
+                  <span className="text-xs">
+                    {t.library.requirement.graphics}: {req.graphics}
+                  </span>
+                )}
+                {req.storage && (
+                  <span className="text-xs">
+                    {t.library.requirement.storage}: {req.storage}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -331,9 +468,12 @@ function VariantsTab({ id }: { readonly id: string }) {
  * 评分块：大数字 + 星 + 计数 + 好评率 %，flex-wrap 窄端折行。
  * 操作行：四个控件 flex-wrap，每个 shrink-0，320px 下折为两行。
  * 五标签页 TabsList：窄端可横滑。
- * 概览 = 简介 + 标签 + 演职员 + 详情卡 + 外部链接 + 配置需求（game only）。
+ * 概览 = 简介 + 标签 + 演职员 + 详情卡 + 外部链接 + 配置需求（game only）
+ *        + 相关社区（flex-wrap 徽章行：头像 shrink-0 + 名称 min-w-0 truncate
+ *        + 成员数 shrink-0；空列表整节不渲染）。
  * 内容 = 章节列表（编号 shrink-0 w-8 + 标题 flex-1 truncate + 已读 ✓ shrink-0）。
- * 评测/讨论 = PostCard 列表（由 PostsForWork 外部组件渲染）。
+ * 评测/讨论 = 顶部右对齐 [+ 写评测 / 发讨论] 按钮（打开发帖弹窗并预填
+ *        本作品；评测模式锁定 review 页签）+ PostCard 列表。
  * 版本 = WorkCard 网格 2/3/4 列。
  * 边界：无封面 → 灰底+类型图标。无评分 → 隐藏评分块。0 章节/变体 → 空提示。
  *       变体本身也显示"主条目"回链徽章。
@@ -388,13 +528,26 @@ export default function WorkDetailPage() {
 
 function PostsForWork({ workId, kind }: { readonly workId: string; readonly kind: "review" | "discussion" }) {
   const [t] = useT();
+  const setPostComposeDialog = useAtomSet(postComposeDialogAtom);
 
   return (
-    <PagedList
-      className="gap-3"
-      emptyState={<EmptyState icon={<MessageSquareIcon />} title={t.common.noResults} />}
-      pageQuery={(offset) => workPostsPageQuery({ workId, kind, sort: "new", offset })}
-      renderPage={(posts) => posts.map((post) => <PostCard key={post.id} post={post} />)}
-    />
+    <div className="flex flex-col gap-3">
+      <div className="flex justify-end">
+        <Button
+          onClick={() => setPostComposeDialog({ open: true, spaceId: "", workId, isReview: kind === "review" })}
+          size="sm"
+          variant="outline"
+        >
+          <PlusIcon />
+          {kind === "review" ? t.library.writeReview : t.library.startDiscussion}
+        </Button>
+      </div>
+      <PagedList
+        className="gap-3"
+        emptyState={<EmptyState icon={<MessageSquareIcon />} title={t.common.noResults} />}
+        pageQuery={(offset) => workPostsPageQuery({ workId, kind, sort: "new", offset })}
+        renderPage={(posts) => posts.map((post) => <PostCard hideWork key={post.id} post={post} />)}
+      />
+    </div>
   );
 }

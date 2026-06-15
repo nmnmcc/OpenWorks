@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/unstable/httpapi";
 
-import { AuthMiddleware } from "./middlewares/auth";
+import { AuthMiddleware, OptionalAuthMiddleware } from "./middlewares/auth";
 
 export class PollOptionEntry extends Schema.Class<PollOptionEntry>("PollOptionEntry")({
   id: Schema.String,
@@ -36,7 +36,7 @@ export class PollsGroup extends HttpApiGroup.make("polls")
       params: { postId: Schema.String },
       success: PollEntry,
       error: [PollNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("vote", "/:postId/vote", {
       params: { postId: Schema.String },
       payload: Schema.Struct({
@@ -44,7 +44,6 @@ export class PollsGroup extends HttpApiGroup.make("polls")
       }),
       success: PollEntry,
       error: [PollNotFound, PollForbidden, PollClosed, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/polls") {}

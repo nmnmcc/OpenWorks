@@ -4,14 +4,13 @@ import { PostFeed } from "@/components/post/PostFeed";
 import { SimpleSelect } from "@/components/shared/SimpleSelect";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "@/lib/i18n/locale";
-import { useState } from "react";
+import { parseAsStringLiteral, useQueryStates } from "nuqs";
 
-type FeedKind = "home" | "all";
-type SortKind = "hot" | "new" | "top";
+const FEEDS = ["home", "all"] as const;
+const SORTS = ["hot", "new", "top"] as const;
 
-function parseSort(value: string): SortKind {
-  return value === "new" ? "new" : value === "top" ? "top" : "hot";
-}
+type FeedKind = (typeof FEEDS)[number];
+type SortKind = (typeof SORTS)[number];
 
 /**
  * Mobile (<640px):
@@ -19,9 +18,10 @@ function parseSort(value: string): SortKind {
  * | [Home|All]   [Sort: v Hot]  |
  * |  ^tabs        ^w-32 shrink-0|
  * |-----------------------------|
- * | [PostCard]                  |
- * | [PostCard]                  |
- * | [PostCard]                  |
+ * | [PostCard] x4               |
+ * | [New works  ->  carousel]   |
+ * | [PostCard] x6               |
+ * | [Popular works -> carousel] |
  * |       [Load more]          |
  * +-----------------------------+
  * w-full, same structure. 320px: sort select
@@ -72,18 +72,22 @@ function parseSort(value: string): SortKind {
  * justify-between 把两端推开，余宽落在中间。
  * 顶栏控件等高：选择器 h-9 sm:h-8 与 TabsTrigger（h-9 sm:h-8）一致。
  * feed/sort 变化时通过 key 重建 PostFeed。
+ * withWorkCarousels：第 4 张帖子卡后插"最新作品"横滚轮播，此后每 6 张
+ * 交替"热门/最新"（节奏常量在 PostFeed；轮播空数据时整行不渲染）。
  * 无响应式断点——所有尺寸结构一致。
- * 边界：空 feed -> PostFeed 内部处理空态。
+ * 边界：空 feed -> PostFeed 内部处理空态（无轮播）。
  */
 export default function HomePage() {
   const [t] = useT();
-  const [feed, setFeed] = useState<FeedKind>("home");
-  const [sort, setSort] = useState<SortKind>("hot");
+  const [{ feed, sort }, setParams] = useQueryStates({
+    feed: parseAsStringLiteral(FEEDS).withDefault("home"),
+    sort: parseAsStringLiteral(SORTS).withDefault("hot"),
+  });
 
   return (
     <div className="mx-auto w-full max-w-3xl">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <Tabs onValueChange={(details) => setFeed(details.value === "all" ? "all" : "home")} value={feed}>
+        <Tabs onValueChange={(details) => setParams({ feed: details.value as FeedKind })} value={feed}>
           <TabsList>
             <TabsTrigger value="home">{t.feed.home}</TabsTrigger>
             <TabsTrigger value="all">{t.feed.all}</TabsTrigger>
@@ -98,12 +102,12 @@ export default function HomePage() {
             { value: "new", label: t.feed.new },
             { value: "top", label: t.feed.top },
           ]}
-          onChange={(value) => setSort(parseSort(value))}
+          onChange={(value) => setParams({ sort: value as SortKind })}
           value={sort}
         />
       </div>
 
-      <PostFeed feed={feed} key={`${feed}:${sort}`} sort={sort} />
+      <PostFeed feed={feed} key={`${feed}:${sort}`} sort={sort} withWorkCarousels />
     </div>
   );
 }

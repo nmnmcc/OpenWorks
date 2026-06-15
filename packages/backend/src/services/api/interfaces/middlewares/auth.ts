@@ -1,4 +1,4 @@
-import { Context, Schema } from "effect";
+import { Context, Schema, type Option } from "effect";
 import { HttpApiMiddleware } from "effect/unstable/httpapi";
 
 export interface Session {
@@ -39,3 +39,14 @@ export class AuthMiddleware extends HttpApiMiddleware.Service<
 >()("@openworks/backend/api/AuthMiddleware", {
   error: Unauthorized,
 }) {}
+
+/** 当前用户（可选）：匿名请求为 `Option.none()`，已登录为 `Option.some(user)`。 */
+export class CurrentUserOption extends Context.Service<CurrentUserOption, Option.Option<User>>()(
+  "@openworks/backend/api/CurrentUserOption",
+) {}
+
+/** 可选认证：从不拒绝请求，仅尽力解析会话并提供 `CurrentUserOption`。 */
+export class OptionalAuthMiddleware extends HttpApiMiddleware.Service<
+  OptionalAuthMiddleware,
+  { provides: CurrentUserOption }
+>()("@openworks/backend/api/OptionalAuthMiddleware") {}

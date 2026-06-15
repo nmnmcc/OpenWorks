@@ -1,5 +1,11 @@
 import { Keys } from "./keys";
+import { PAGE_SIZE } from "./posts";
 import { ApiClient } from "./runtime";
+
+export const userSearchQuery = (q: string, offset = 0) =>
+  ApiClient.query("users", "search", {
+    query: { q, limit: PAGE_SIZE, offset },
+  });
 
 export const meQuery = ApiClient.query("users", "me", {
   reactivityKeys: [Keys.me],

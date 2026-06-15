@@ -11,7 +11,7 @@ import { useState, useTransition, type ReactNode } from "react";
 
 interface PagedListProps<A, E> {
   readonly pageQuery: (offset: number) => Atom.Atom<AsyncResult.AsyncResult<ReadonlyArray<A>, E>>;
-  readonly renderPage: (items: ReadonlyArray<A>) => ReactNode;
+  readonly renderPage: (items: ReadonlyArray<A>, offset: number) => ReactNode;
   readonly renderContainer?: (pages: ReactNode) => ReactNode;
   readonly emptyState: ReactNode;
   readonly className?: string;
@@ -19,13 +19,14 @@ interface PagedListProps<A, E> {
 
 interface PagedListPageProps<A, E> {
   readonly atom: Atom.Atom<AsyncResult.AsyncResult<ReadonlyArray<A>, E>>;
-  readonly renderPage: (items: ReadonlyArray<A>) => ReactNode;
+  readonly offset: number;
+  readonly renderPage: (items: ReadonlyArray<A>, offset: number) => ReactNode;
 }
 
-function PagedListPage<A, E>({ atom, renderPage }: PagedListPageProps<A, E>) {
+function PagedListPage<A, E>({ atom, offset, renderPage }: PagedListPageProps<A, E>) {
   const result = useAtomSuspense(atom);
 
-  return <>{renderPage(result.value)}</>;
+  return <>{renderPage(result.value, offset)}</>;
 }
 
 interface LoadMoreButtonProps<A, E> {
@@ -65,7 +66,13 @@ function LoadMoreButton<A, E>({ atom, isPending, onLoadMore }: LoadMoreButtonPro
  * 按钮显示 loading；新页就绪后无闪烁追加。
  * 边界：首页 0 条 → 渲染 emptyState；末页不满 PAGE_SIZE → 隐藏按钮。
  */
-export function PagedList<A, E>({ pageQuery, renderPage, renderContainer, emptyState, className }: PagedListProps<A, E>) {
+export function PagedList<A, E>({
+  pageQuery,
+  renderPage,
+  renderContainer,
+  emptyState,
+  className,
+}: PagedListProps<A, E>) {
   const firstPage = useAtomSuspense(pageQuery(0));
   const [pageCount, setPageCount] = useState(1);
   const [isPending, startTransition] = useTransition();
@@ -76,7 +83,7 @@ export function PagedList<A, E>({ pageQuery, renderPage, renderContainer, emptyS
 
   const offsets = Array.from({ length: pageCount }, (_, index) => index * PAGE_SIZE);
   const pages = offsets.map((offset) => (
-    <PagedListPage atom={pageQuery(offset)} key={offset} renderPage={renderPage} />
+    <PagedListPage atom={pageQuery(offset)} key={offset} offset={offset} renderPage={renderPage} />
   ));
 
   return (

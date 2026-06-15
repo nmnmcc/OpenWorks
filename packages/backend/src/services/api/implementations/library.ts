@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 import { v7 } from "uuid";
 
@@ -9,7 +9,7 @@ import { libraryItems } from "../../database/schema/library-item";
 import { works } from "../../database/schema/work";
 import { Api } from "../interfaces";
 import { LibraryItemEntry, LibraryWorkNotFound } from "../interfaces/library";
-import { CurrentUser } from "../interfaces/middlewares/auth";
+import { CurrentUser, CurrentUserOption, Unauthorized } from "../interfaces/middlewares/auth";
 import { Work } from "../interfaces/works";
 
 export const LibraryHandlers = HttpApiBuilder.group(
@@ -22,12 +22,16 @@ export const LibraryHandlers = HttpApiBuilder.group(
     return handlers
       .handle("list", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const currentUserId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
+          const userId = query.userId ?? currentUserId;
+          if (userId === undefined) {
+            return yield* new Unauthorized();
+          }
           const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
           const offset = query.offset ?? 0;
           const rows = yield* database.query.libraryItems.findMany({
             where: {
-              userId: query.userId ?? user.id,
+              userId,
               status: query.status,
               workId: query.workId,
             },

@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
 import { PortableText } from "../../../libraries/portable-text";
-import { AuthMiddleware } from "./middlewares/auth";
+import { AuthMiddleware, OptionalAuthMiddleware } from "./middlewares/auth";
 
 export class Post extends Schema.Class<Post>("Post")({
   id: Schema.String,
@@ -52,7 +52,11 @@ export class InvalidPoll extends Schema.TaggedErrorClass<InvalidPoll>()("Invalid
 
 export class InvalidFlair extends Schema.TaggedErrorClass<InvalidFlair>()("InvalidFlair", {}, { httpApiStatus: 400 }) {}
 
-export class ReviewConflict extends Schema.TaggedErrorClass<ReviewConflict>()("ReviewConflict", {}, { httpApiStatus: 409 }) {}
+export class ReviewConflict extends Schema.TaggedErrorClass<ReviewConflict>()(
+  "ReviewConflict",
+  {},
+  { httpApiStatus: 409 },
+) {}
 
 export class PostWorkNotFound extends Schema.TaggedErrorClass<PostWorkNotFound>()(
   "PostWorkNotFound",
@@ -68,13 +72,14 @@ export class PostsGroup extends HttpApiGroup.make("posts")
         feed: Schema.optional(Schema.Literals(["home", "all"])),
         sort: Schema.optional(Schema.Literals(["hot", "new", "top"])),
         workId: Schema.optional(Schema.String),
+        authorId: Schema.optional(Schema.String),
         kind: Schema.optional(Schema.Literals(["review", "discussion"])),
         limit: Schema.optional(Schema.NumberFromString),
         offset: Schema.optional(Schema.NumberFromString),
       },
       success: Schema.Array(Post),
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("search", "/search", {
       query: {
         q: Schema.String,
@@ -84,12 +89,12 @@ export class PostsGroup extends HttpApiGroup.make("posts")
       },
       success: PostSearchResult,
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("getById", "/:id", {
       params: { id: Schema.String },
       success: Post,
       error: [PostNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("create", "/", {
       payload: Schema.Struct({
         title: Schema.String,
@@ -105,8 +110,16 @@ export class PostsGroup extends HttpApiGroup.make("posts")
         pollEndsAt: Schema.optional(Schema.DateFromString),
       }),
       success: Post,
-      error: [PostForbidden, PostSpaceNotFound, InvalidPoll, InvalidFlair, ReviewConflict, PostWorkNotFound, HttpApiError.InternalServerError],
-    }),
+      error: [
+        PostForbidden,
+        PostSpaceNotFound,
+        InvalidPoll,
+        InvalidFlair,
+        ReviewConflict,
+        PostWorkNotFound,
+        HttpApiError.InternalServerError,
+      ],
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.patch("update", "/:id", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -119,27 +132,27 @@ export class PostsGroup extends HttpApiGroup.make("posts")
       }),
       success: Post,
       error: [PostNotFound, PostForbidden, InvalidFlair, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("pin", "/:id/pin", {
       params: { id: Schema.String },
       success: Post,
       error: [PostNotFound, PostForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("unpin", "/:id/unpin", {
       params: { id: Schema.String },
       success: Post,
       error: [PostNotFound, PostForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("lock", "/:id/lock", {
       params: { id: Schema.String },
       success: Post,
       error: [PostNotFound, PostForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("unlock", "/:id/unlock", {
       params: { id: Schema.String },
       success: Post,
       error: [PostNotFound, PostForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("remove", "/:id/remove", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -147,12 +160,11 @@ export class PostsGroup extends HttpApiGroup.make("posts")
       }),
       success: Post,
       error: [PostNotFound, PostForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("delete", "/:id", {
       params: { id: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [PostNotFound, PostForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/posts") {}

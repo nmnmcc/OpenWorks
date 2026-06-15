@@ -32,6 +32,8 @@ export const Keys = {
   workChapters: (id: string) => `work:${id}:chapters`,
   workVariants: (id: string) => `work:${id}:variants`,
   workRequirements: (id: string) => `work:${id}:requirements`,
+  workSpaces: (id: string) => `work:${id}:spaces`,
+  spaceWorks: (id: string) => `space:${id}:works`,
   chapter: (id: string) => `chapter:${id}`,
   creators: "creators",
   creator: (id: string) => `creator:${id}`,

@@ -1,19 +1,21 @@
 "use client";
 
 import { Keys } from "@/atoms/keys";
-import { deleteShelfAtom, removeShelfItemAtom, shelfItemsQuery, shelfQuery } from "@/atoms/shelves";
+import { addShelfItemAtom, deleteShelfAtom, removeShelfItemAtom, shelfItemsQuery, shelfQuery } from "@/atoms/shelves";
 import { SectionBoundary } from "@/components/SectionBoundary";
 import { WorkCard } from "@/components/library/WorkCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PagedList } from "@/components/shared/PagedList";
+import { WorkPicker } from "@/components/shared/WorkPicker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { showApiError } from "@/lib/errors";
 import { useT } from "@/lib/i18n/locale";
 import { authClient } from "@/lib/auth-client";
 import { useAtomSet, useAtomSuspense } from "@effect/atom-react";
-import { BookmarkIcon, TrashIcon, XIcon } from "lucide-react";
+import { BookmarkIcon, PlusIcon, TrashIcon, XIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 
 function ShelfHeader({ id }: { readonly id: string }) {
   const [t] = useT();
@@ -33,20 +35,52 @@ function ShelfHeader({ id }: { readonly id: string }) {
   };
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <BookmarkIcon className="size-5 shrink-0" />
-        <h1 className="min-w-0 truncate text-xl font-semibold">{shelf.name}</h1>
-        <Badge className="shrink-0" variant="outline">
-          {shelf.isPublic ? t.library.shelf.public : t.library.shelf.private}
-        </Badge>
-        <span className="text-muted-foreground shrink-0 text-sm">{t.library.shelf.itemCount(shelf.itemCount)}</span>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <BookmarkIcon className="size-5 shrink-0" />
+          <h1 className="min-w-0 truncate text-xl font-semibold">{shelf.name}</h1>
+          <Badge className="shrink-0" variant="outline">
+            {shelf.isPublic ? t.library.shelf.public : t.library.shelf.private}
+          </Badge>
+          <span className="text-muted-foreground shrink-0 text-sm">{t.library.shelf.itemCount(shelf.itemCount)}</span>
+        </div>
+        {isOwner && (
+          <Button className="shrink-0" disabled={isPending} onClick={handleDelete} size="icon-sm" variant="ghost">
+            <TrashIcon className="size-4" />
+          </Button>
+        )}
       </div>
-      {isOwner && (
-        <Button className="shrink-0" disabled={isPending} onClick={handleDelete} size="icon-sm" variant="ghost">
-          <TrashIcon className="size-4" />
-        </Button>
-      )}
+      {isOwner && <AddItemRow shelfId={id} />}
+    </div>
+  );
+}
+
+function AddItemRow({ shelfId }: { readonly shelfId: string }) {
+  const [t] = useT();
+  const addItem = useAtomSet(addShelfItemAtom, { mode: "promise" });
+  const [workId, setWorkId] = useState<string | undefined>(undefined);
+  const [isPending, startTransition] = useTransition();
+
+  const handleAdd = () => {
+    if (!workId) return;
+    startTransition(async () => {
+      try {
+        await addItem({ params: { id: shelfId }, payload: { workId: workId! }, reactivityKeys: [Keys.shelves, Keys.shelfItems(shelfId)] });
+        setWorkId(undefined);
+      } catch (error) {
+        showApiError(t.errors, error);
+      }
+    });
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <WorkPicker onValueChange={setWorkId} placeholder={t.library.shelf.addToShelf} value={workId} />
+      <Button className="shrink-0" disabled={isPending || !workId} onClick={handleAdd} size="sm">
+        <PlusIcon className="size-4" />
+        {t.common.create}
+      </Button>
     </div>
   );
 }

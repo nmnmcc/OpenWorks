@@ -1,12 +1,12 @@
 import { eq, sql } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 import { v7 } from "uuid";
 
 import { Database } from "../../database";
 import { pollOptions, pollVotes } from "../../database/schema/poll";
 import { Api } from "../interfaces";
-import { CurrentUser } from "../interfaces/middlewares/auth";
+import { CurrentUser, CurrentUserOption } from "../interfaces/middlewares/auth";
 import { PollClosed, PollEntry, PollNotFound, PollOptionEntry } from "../interfaces/polls";
 
 export const PollsHandlers = HttpApiBuilder.group(
@@ -18,7 +18,7 @@ export const PollsHandlers = HttpApiBuilder.group(
     return handlers
       .handle("getByPostId", ({ params }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const poll = yield* database.query.polls.findFirst({
             where: { postId: params.postId },
             with: { options: true },
@@ -37,23 +37,29 @@ export const PollsHandlers = HttpApiBuilder.group(
               where: { id: post.spaceId },
             });
             if (space && space.visibility === "private") {
-              const membership = yield* database.query.spaceMembers.findFirst({
-                where: {
-                  spaceId: space.id,
-                  userId: user.id,
-                },
-              });
+              const membership =
+                userId === undefined
+                  ? undefined
+                  : yield* database.query.spaceMembers.findFirst({
+                      where: {
+                        spaceId: space.id,
+                        userId,
+                      },
+                    });
               if (!membership) {
                 return yield* new PollNotFound();
               }
             }
           }
-          const userVote = yield* database.query.pollVotes.findFirst({
-            where: {
-              pollId: poll.id,
-              userId: user.id,
-            },
-          });
+          const userVote =
+            userId === undefined
+              ? undefined
+              : yield* database.query.pollVotes.findFirst({
+                  where: {
+                    pollId: poll.id,
+                    userId,
+                  },
+                });
           return new PollEntry({
             id: poll.id,
             postId: poll.postId,

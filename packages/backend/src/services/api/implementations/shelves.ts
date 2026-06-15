@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 import { v7 } from "uuid";
 
@@ -7,7 +7,7 @@ import { Config } from "../../config";
 import { Database } from "../../database";
 import { shelfItems, shelves } from "../../database/schema/shelf";
 import { Api } from "../interfaces";
-import { CurrentUser } from "../interfaces/middlewares/auth";
+import { CurrentUser, CurrentUserOption, Unauthorized } from "../interfaces/middlewares/auth";
 import {
   ShelfEntry,
   ShelfForbidden,
@@ -28,11 +28,14 @@ export const ShelvesHandlers = HttpApiBuilder.group(
     return handlers
       .handle("list", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
           const offset = query.offset ?? 0;
-          const ownerId = query.ownerId ?? user.id;
-          const isOwner = ownerId === user.id;
+          const ownerId = query.ownerId ?? userId;
+          if (ownerId === undefined) {
+            return yield* new Unauthorized();
+          }
+          const isOwner = ownerId === userId;
 
           if (query.workId) {
             const items = yield* database.query.shelfItems.findMany({
@@ -69,14 +72,14 @@ export const ShelvesHandlers = HttpApiBuilder.group(
       )
       .handle("getById", ({ params }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const row = yield* database.query.shelves.findFirst({
             where: { id: params.id },
           });
           if (!row) {
             return yield* new ShelfNotFound();
           }
-          if (!row.isPublic && row.ownerId !== user.id) {
+          if (!row.isPublic && row.ownerId !== userId) {
             return yield* new ShelfForbidden();
           }
           return new ShelfEntry(row);
@@ -84,14 +87,14 @@ export const ShelvesHandlers = HttpApiBuilder.group(
       )
       .handle("getItems", ({ params, query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const shelf = yield* database.query.shelves.findFirst({
             where: { id: params.id },
           });
           if (!shelf) {
             return yield* new ShelfNotFound();
           }
-          if (!shelf.isPublic && shelf.ownerId !== user.id) {
+          if (!shelf.isPublic && shelf.ownerId !== userId) {
             return yield* new ShelfForbidden();
           }
           const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);

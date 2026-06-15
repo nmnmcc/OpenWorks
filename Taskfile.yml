@@ -19,8 +19,64 @@ tasks:
       - backend:dev
 
   services:
-    desc: Start all dev services
-    cmd: devenv up --no-tui
+    desc: Start Nomad agent and deploy infra services
+    cmds:
+      - task: services:agent
+      - task: services:network
+      - task: services:run
+
+  services:agent:
+    desc: Start Nomad dev agent (idempotent)
+    status:
+      - nomad agent-info > /dev/null 2>&1
+    cmds:
+      - mkdir -p .dev
+      - nohup nomad agent -dev -log-level=warn -bind=127.0.0.1 -config=deploy/nomad-dev.hcl > .dev/nomad.log 2>&1 &
+      - until nomad agent-info > /dev/null 2>&1; do sleep 1; done
+
+  services:network:
+    desc: Create Docker network (idempotent)
+    cmd: docker network create openworks 2>/dev/null || true
+
+  services:run:
+    desc: Deploy infrastructure job
+    cmd: nomad job run deploy/infra.nomad.hcl
+
+  services:stop:
+    desc: Stop infrastructure services (preserves data)
+    cmd: nomad job stop infra || true
+
+  services:start:
+    desc: Start stopped infrastructure services
+    cmds:
+      - task: services:agent
+      - task: services:network
+      - task: services:run
+
+  services:status:
+    desc: Show infrastructure status
+    cmd: nomad job status infra
+
+  services:logs:
+    desc: Show logs for a group (usage{{":"}} task services:logs -- postgres)
+    cmd: nomad alloc logs -job infra {{.CLI_ARGS}}
+
+  services:destroy:
+    desc: Destroy all infra data
+    cmds:
+      - nomad job stop -purge infra 2>/dev/null || true
+      - >-
+        docker volume rm
+        openworks-postgres openworks-rabbitmq
+        openworks-typesense openworks-rustfs
+        2>/dev/null || true
+      - docker network rm openworks 2>/dev/null || true
+
+  services:reset:
+    desc: Recreate all infrastructure (destroys data)
+    cmds:
+      - task: services:destroy
+      - task: services
 
   build:
     desc: Build all packages

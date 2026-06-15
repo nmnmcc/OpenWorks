@@ -1,7 +1,8 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
-import { AuthMiddleware } from "./middlewares/auth";
+import { AuthMiddleware, OptionalAuthMiddleware } from "./middlewares/auth";
+import { Work } from "./works";
 
 export class Space extends Schema.Class<Space>("Space")({
   id: Schema.String,
@@ -62,6 +63,15 @@ export class SpaceInvitationEntry extends Schema.Class<SpaceInvitationEntry>("Sp
   updatedAt: Schema.DateFromString,
 }) {}
 
+export class SpaceWorkEntry extends Schema.Class<SpaceWorkEntry>("SpaceWorkEntry")({
+  id: Schema.String,
+  spaceId: Schema.String,
+  workId: Schema.String,
+  addedById: Schema.NullOr(Schema.String),
+  createdAt: Schema.DateFromString,
+  work: Work,
+}) {}
+
 export class SpaceSearchResult extends Schema.Class<SpaceSearchResult>("SpaceSearchResult")({
   hits: Schema.Array(Space),
   query: Schema.String,
@@ -111,6 +121,18 @@ export class InvitationInvalid extends Schema.TaggedErrorClass<InvitationInvalid
   { httpApiStatus: 410 },
 ) {}
 
+export class SpaceWorkNotFound extends Schema.TaggedErrorClass<SpaceWorkNotFound>()(
+  "SpaceWorkNotFound",
+  {},
+  { httpApiStatus: 404 },
+) {}
+
+export class SpaceWorkConflict extends Schema.TaggedErrorClass<SpaceWorkConflict>()(
+  "SpaceWorkConflict",
+  {},
+  { httpApiStatus: 409 },
+) {}
+
 export class SpacesGroup extends HttpApiGroup.make("spaces")
   .add(
     HttpApiEndpoint.get("search", "/search", {
@@ -121,7 +143,7 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       },
       success: SpaceSearchResult,
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("list", "/", {
       query: {
         joined: Schema.optional(Schema.Literal("true")),
@@ -130,12 +152,12 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       },
       success: Schema.Array(Space),
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("getById", "/:id", {
       params: { id: Schema.String },
       success: Space,
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("create", "/", {
       payload: Schema.Struct({
         name: Schema.String,
@@ -146,7 +168,7 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       }),
       success: Space,
       error: [SpaceSlugConflict, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.patch("update", "/:id", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -160,27 +182,27 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       }),
       success: Space,
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("delete", "/:id", {
       params: { id: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("join", "/:id/join", {
       params: { id: Schema.String },
       success: SpaceMemberEntry,
       error: [SpaceNotFound, SpaceForbidden, AlreadyMember, UserBanned, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("leave", "/:id/leave", {
       params: { id: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [SpaceNotFound, NotMember, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("getMembership", "/:id/membership", {
       params: { id: Schema.String },
       success: Schema.NullOr(SpaceMemberEntry),
       error: [SpaceNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("listMembers", "/:id/members", {
       params: { id: Schema.String },
       query: {
@@ -189,7 +211,7 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       },
       success: Schema.Array(SpaceMemberEntry),
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.patch("updateMember", "/:id/members/:memberId", {
       params: { id: Schema.String, memberId: Schema.String },
       payload: Schema.Struct({
@@ -197,12 +219,12 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       }),
       success: SpaceMemberEntry,
       error: [SpaceNotFound, NotMember, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("removeMember", "/:id/members/:memberId", {
       params: { id: Schema.String, memberId: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [SpaceNotFound, NotMember, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("listBans", "/:id/bans", {
       params: { id: Schema.String },
       query: {
@@ -211,7 +233,7 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       },
       success: Schema.Array(SpaceBanEntry),
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("ban", "/:id/bans", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -221,12 +243,12 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       }),
       success: SpaceBanEntry,
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("unban", "/:id/bans/:banId", {
       params: { id: Schema.String, banId: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("listMutes", "/:id/mutes", {
       params: { id: Schema.String },
       query: {
@@ -235,7 +257,7 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       },
       success: Schema.Array(SpaceMuteEntry),
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("mute", "/:id/mutes", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -245,12 +267,12 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       }),
       success: SpaceMuteEntry,
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("unmute", "/:id/mutes/:muteId", {
       params: { id: Schema.String, muteId: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("listInvitations", "/:id/invitations", {
       params: { id: Schema.String },
       query: {
@@ -259,7 +281,7 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       },
       success: Schema.Array(SpaceInvitationEntry),
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("createInvitation", "/:id/invitations", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -269,12 +291,34 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
       }),
       success: SpaceInvitationEntry,
       error: [SpaceNotFound, SpaceForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("revokeInvitation", "/:id/invitations/:invitationId", {
       params: { id: Schema.String, invitationId: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [SpaceNotFound, SpaceForbidden, InvitationNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
+    HttpApiEndpoint.get("listWorks", "/:id/works", {
+      params: { id: Schema.String },
+      query: {
+        limit: Schema.optional(Schema.NumberFromString),
+        offset: Schema.optional(Schema.NumberFromString),
+      },
+      success: Schema.Array(SpaceWorkEntry),
+      error: [SpaceNotFound, HttpApiError.InternalServerError],
+    }).middleware(OptionalAuthMiddleware),
+    HttpApiEndpoint.post("addWork", "/:id/works", {
+      params: { id: Schema.String },
+      payload: Schema.Struct({
+        workId: Schema.String,
+      }),
+      success: SpaceWorkEntry,
+      error: [SpaceNotFound, SpaceForbidden, SpaceWorkNotFound, SpaceWorkConflict, HttpApiError.InternalServerError],
+    }).middleware(AuthMiddleware),
+    HttpApiEndpoint.delete("removeWork", "/:id/works/:workId", {
+      params: { id: Schema.String, workId: Schema.String },
+      success: HttpApiSchema.NoContent,
+      error: [SpaceNotFound, SpaceForbidden, SpaceWorkNotFound, HttpApiError.InternalServerError],
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("acceptInvitation", "/invitations/accept", {
       payload: Schema.Struct({
         token: Schema.String,
@@ -288,7 +332,6 @@ export class SpacesGroup extends HttpApiGroup.make("spaces")
         UserBanned,
         HttpApiError.InternalServerError,
       ],
-    }),
+    }).middleware(AuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/spaces") {}

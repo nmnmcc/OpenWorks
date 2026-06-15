@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { Effect, Match } from "effect";
+import { Effect, Match, Option } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 import { v7 } from "uuid";
 
@@ -13,7 +13,7 @@ import { posts } from "../../database/schema/post";
 import { works } from "../../database/schema/work";
 import { Search } from "../../search";
 import { Api } from "../interfaces";
-import { CurrentUser } from "../interfaces/middlewares/auth";
+import { CurrentUser, CurrentUserOption } from "../interfaces/middlewares/auth";
 import {
   InvalidFlair,
   InvalidPoll,
@@ -25,6 +25,16 @@ import {
   PostWorkNotFound,
   ReviewConflict,
 } from "../interfaces/posts";
+
+/** 可见帖子的空间过滤：无空间、公开空间，以及（已登录时）自己加入的空间。 */
+const visibleSpaceFilters = (userId: string | undefined) =>
+  userId === undefined
+    ? [{ spaceId: { isNull: true as const } }, { space: { visibility: { ne: "private" as const } } }]
+    : [
+        { spaceId: { isNull: true as const } },
+        { space: { visibility: { ne: "private" as const } } },
+        { space: { members: { userId } } },
+      ];
 
 export const PostsHandlers = HttpApiBuilder.group(
   Api,
@@ -38,7 +48,7 @@ export const PostsHandlers = HttpApiBuilder.group(
     return handlers
       .handle("list", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const sort = query.sort ?? "hot";
           const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
           const offset = query.offset ?? 0;
@@ -47,18 +57,11 @@ export const PostsHandlers = HttpApiBuilder.group(
               removed: false,
               spaceId: query.spaceId,
               workId: query.workId,
+              authorId: query.authorId,
               type: query.kind === "review" ? "review" : query.kind === "discussion" ? { ne: "review" } : undefined,
-              space: query.feed === "home" ? { members: { userId: user.id } } : undefined,
-              NOT: { hiddenPosts: { userId: user.id } },
-              OR: [
-                { spaceId: { isNull: true } },
-                {
-                  space: {
-                    visibility: { ne: "private" },
-                  },
-                },
-                { space: { members: { userId: user.id } } },
-              ],
+              space: query.feed === "home" && userId !== undefined ? { members: { userId } } : undefined,
+              NOT: userId === undefined ? undefined : { hiddenPosts: { userId } },
+              OR: visibleSpaceFilters(userId),
             },
             orderBy: (table, { desc, sql }) =>
               Match.value(sort).pipe(
@@ -79,7 +82,7 @@ export const PostsHandlers = HttpApiBuilder.group(
       )
       .handle("search", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const limit = query.limit ?? config.pagination.searchDefaultLimit;
           const offset = query.offset ?? 0;
 
@@ -102,15 +105,7 @@ export const PostsHandlers = HttpApiBuilder.group(
             where: {
               id: { in: ids },
               removed: false,
-              OR: [
-                { spaceId: { isNull: true } },
-                {
-                  space: {
-                    visibility: { ne: "private" },
-                  },
-                },
-                { space: { members: { userId: user.id } } },
-              ],
+              OR: visibleSpaceFilters(userId),
             },
           });
 
@@ -135,7 +130,7 @@ export const PostsHandlers = HttpApiBuilder.group(
       )
       .handle("getById", ({ params }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const row = yield* database.query.posts.findFirst({
             where: { id: params.id },
           });
@@ -147,12 +142,15 @@ export const PostsHandlers = HttpApiBuilder.group(
               where: { id: row.spaceId },
             });
             if (space && space.visibility === "private") {
-              const membership = yield* database.query.spaceMembers.findFirst({
-                where: {
-                  spaceId: space.id,
-                  userId: user.id,
-                },
-              });
+              const membership =
+                userId === undefined
+                  ? undefined
+                  : yield* database.query.spaceMembers.findFirst({
+                      where: {
+                        spaceId: space.id,
+                        userId,
+                      },
+                    });
               if (!membership) {
                 return yield* new PostNotFound();
               }

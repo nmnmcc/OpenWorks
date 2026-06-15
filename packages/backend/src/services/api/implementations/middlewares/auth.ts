@@ -1,9 +1,16 @@
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { isNotNullish } from "effect/Predicate";
 import { HttpServerRequest } from "effect/unstable/http";
 
 import { Auth } from "../../../auth";
-import { AuthMiddleware, CurrentSession, CurrentUser, Unauthorized } from "../../interfaces/middlewares/auth";
+import {
+  AuthMiddleware,
+  CurrentSession,
+  CurrentUser,
+  CurrentUserOption,
+  OptionalAuthMiddleware,
+  Unauthorized,
+} from "../../interfaces/middlewares/auth";
 
 export const AuthMiddlewareLive = Layer.effect(
   AuthMiddleware,
@@ -26,6 +33,27 @@ export const AuthMiddlewareLive = Layer.effect(
           Effect.provideService(CurrentSession, result.session),
           Effect.provideService(CurrentUser, result.user),
         );
+      });
+  }),
+);
+
+export const OptionalAuthMiddlewareLive = Layer.effect(
+  OptionalAuthMiddleware,
+  Effect.gen(function* () {
+    const auth = yield* Auth;
+
+    return (next) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const headers = new globalThis.Headers(request.headers);
+
+        const user = yield* auth.api.getSession({ headers }).pipe(
+          Effect.map((result) => Option.fromNullishOr(result?.user)),
+          Effect.catchTag("API", () => Effect.succeed(Option.none())),
+          Effect.catchTag("Unknown", () => Effect.succeed(Option.none())),
+        );
+
+        return yield* next.pipe(Effect.provideService(CurrentUserOption, user));
       });
   }),
 );

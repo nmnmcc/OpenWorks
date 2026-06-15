@@ -38,7 +38,7 @@ export class UsersGroup extends HttpApiGroup.make("users")
     HttpApiEndpoint.get("me", "/me", {
       success: UserProfile,
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("getById", "/:id", {
       params: { id: Schema.String },
       success: UserProfile,
@@ -53,7 +53,6 @@ export class UsersGroup extends HttpApiGroup.make("users")
       }),
       success: UserProfile,
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(AuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/users") {}

@@ -26,6 +26,7 @@ const translation = {
     updatedAt: "Updated",
     edited: "edited",
     noResults: "No results found",
+    viewAll: "View all",
   },
   nav: {
     home: "Home",
@@ -69,6 +70,8 @@ const translation = {
     top: "Top",
     empty: "No posts yet",
     emptyHint: "Be the first to share something!",
+    newWorks: "New works",
+    popularWorks: "Popular works",
   },
   post: {
     pinned: "Pinned",
@@ -115,6 +118,10 @@ const translation = {
     typeLink: "Link",
     typeImage: "Image",
     typePoll: "Poll",
+    typeReview: "Review",
+    work: "Work",
+    linkedWork: "Linked work (optional)",
+    searchWork: "Search works…",
     postTitle: "Title",
     body: "Body",
     url: "URL",
@@ -189,6 +196,7 @@ const translation = {
     members: (n: number) => (n === 1 ? "1 member" : `${n} members`),
     about: "About community",
     rules: "Rules",
+    relatedWorks: "Related works",
     wiki: "Wiki",
     modTools: "Mod tools",
     created: "Created",
@@ -230,6 +238,7 @@ const translation = {
       invitations: "Invitations",
       reports: "Reports",
       log: "Mod log",
+      works: "Works",
     },
     settings: {
       title: "Community settings",
@@ -254,6 +263,11 @@ const translation = {
       moveDown: "Move down",
       empty: "No rules yet",
       editTitle: "Edit rule",
+    },
+    works: {
+      title: "Related works",
+      add: "Add",
+      empty: "No related works yet.",
     },
     flairs: {
       title: "Post flairs",
@@ -356,6 +370,13 @@ const translation = {
     sendMessage: "Send message",
     editProfile: "Edit profile",
     noBio: "This user hasn't written a bio yet.",
+    tabs: {
+      posts: "Posts",
+      reviews: "Reviews",
+      library: "Library",
+      viewLibrary: "View library",
+      viewShelves: "View shelves",
+    },
   },
   upload: {
     dropOrClick: "Drop an image or click to browse",
@@ -389,6 +410,13 @@ const translation = {
     resultCount: (n: number) => (n === 1 ? "1 result" : `${n} results`),
     empty: "No results found",
     prompt: "Type something in the search bar to get started",
+    tabs: {
+      posts: "Posts",
+      works: "Works",
+      creators: "Creators",
+      spaces: "Communities",
+      users: "Users",
+    },
   },
   invite: {
     title: "Community invitation",
@@ -538,6 +566,8 @@ const translation = {
     },
     overview: "Overview",
     content: "Content",
+    relatedSpaces: "Related communities",
+    startDiscussion: "Start a discussion",
     reviews: "Reviews",
     discussions: "Discussions",
     variants: "Editions",

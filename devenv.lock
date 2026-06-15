@@ -3,17 +3,37 @@
     "devenv": {
       "locked": {
         "dir": "src/modules",
-        "lastModified": 1781117230,
-        "narHash": "sha256-0S8MbdvTw8ijL1ydWwbFmlt8R2GaS+sMj8zPKUfaFfo=",
+        "lastModified": 1781195293,
+        "narHash": "sha256-C9OFghpvf3RzK2rGsZjjNNrTrHgFOecEkpDhFnU4QGs=",
         "owner": "cachix",
         "repo": "devenv",
-        "rev": "dec50ef767f48ccd3e2d17362eb3336cadba119c",
+        "rev": "5f5109c83854577191634f7b86fc6e0c8fd44964",
         "type": "github"
       },
       "original": {
         "dir": "src/modules",
         "owner": "cachix",
         "repo": "devenv",
+        "type": "github"
+      }
+    },
+    "hashicorp": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1781240364,
+        "narHash": "sha256-zAYuW36HRZRdx32MYHDYi/bIQROAmbh5esuDmr56Xl0=",
+        "owner": "nmnmcc",
+        "repo": "HashiCorpNix",
+        "rev": "87e0ac743922de1269c0bde890ea2486679a08b0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nmnmcc",
+        "repo": "HashiCorpNix",
         "type": "github"
       }
     },
@@ -56,6 +76,7 @@
     "root": {
       "inputs": {
         "devenv": "devenv",
+        "hashicorp": "hashicorp",
         "nixpkgs": "nixpkgs"
       }
     }

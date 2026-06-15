@@ -23,13 +23,11 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import type { ReportEntry } from "@openworks/backend/api";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState, type FormEvent } from "react";
 
-type ReportStatus = "pending" | "resolved" | "dismissed";
-
-function parseStatus(value: string): ReportStatus {
-  return value === "resolved" || value === "dismissed" ? value : "pending";
-}
+const REPORT_STATUSES = ["pending", "resolved", "dismissed"] as const;
+type ReportStatus = (typeof REPORT_STATUSES)[number];
 
 function PostTarget({ postId }: { readonly postId: string }) {
   const [t] = useT();
@@ -124,7 +122,7 @@ function ResolveDialog({ report, status, spaceId, onClose }: ResolveDialogProps)
 
 function ReportsSection({ spaceId }: { readonly spaceId: string }) {
   const [t] = useT();
-  const [status, setStatus] = useState<ReportStatus>("pending");
+  const [status, setStatus] = useQueryState("status", parseAsStringLiteral(REPORT_STATUSES).withDefault("pending"));
   const [resolving, setResolving] = useState<
     { readonly report: ReportEntry; readonly status: "resolved" | "dismissed" } | undefined
   >(undefined);
@@ -141,7 +139,7 @@ function ReportsSection({ spaceId }: { readonly spaceId: string }) {
             { value: "resolved", label: t.mod.reports.statusResolved },
             { value: "dismissed", label: t.mod.reports.statusDismissed },
           ]}
-          onChange={(value) => setStatus(parseStatus(value))}
+          onChange={(value) => setStatus(value as ReportStatus)}
           value={status}
         />
       </div>

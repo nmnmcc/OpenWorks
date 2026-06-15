@@ -9,6 +9,7 @@ import { ImageUpload } from "@/components/shared/ImageUpload";
 import { PortableTextEditor } from "@/components/shared/PortableTextEditor";
 import { SimpleSelect } from "@/components/shared/SimpleSelect";
 import { SpacePicker } from "@/components/shared/SpacePicker";
+import { WorkPicker } from "@/components/shared/WorkPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -25,10 +26,10 @@ import { XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 
-type PostType = "text" | "link" | "image" | "poll";
+type PostType = "text" | "link" | "image" | "poll" | "review";
 
 function parsePostType(value: string): PostType {
-  return value === "link" || value === "image" || value === "poll" ? value : "text";
+  return value === "link" || value === "image" || value === "poll" || value === "review" ? value : "text";
 }
 
 function FlairSelect({
@@ -63,15 +64,24 @@ function FlairSelect({
   );
 }
 
-function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
+function ComposerForm({
+  initialSpaceId,
+  initialWorkId,
+  initialIsReview,
+}: {
+  readonly initialSpaceId: string;
+  readonly initialWorkId: string | undefined;
+  readonly initialIsReview: boolean;
+}) {
   const [t] = useT();
   const router = useRouter();
   const { data: session } = authClient.useSession();
   const createPost = useAtomSet(createPostAtom, { mode: "promise" });
   const setDialog = useAtomSet(postComposeDialogAtom);
 
-  const [type, setType] = useState<PostType>("text");
+  const [type, setType] = useState<PostType>(initialIsReview ? "review" : "text");
   const [spaceId, setSpaceId] = useState<string | undefined>(initialSpaceId.length > 0 ? initialSpaceId : undefined);
+  const [workId, setWorkId] = useState<string | undefined>(initialWorkId);
   const [flairId, setFlairId] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState<ReadonlyArray<unknown> | undefined>(undefined);
@@ -90,7 +100,8 @@ function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
         payload: {
           title: title.trim(),
           type,
-          content: type === "text" ? toPortableTextContent(body) : undefined,
+          workId: type === "poll" ? undefined : workId,
+          content: type === "text" || type === "review" ? toPortableTextContent(body) : undefined,
           url: type === "link" || type === "image" ? url.trim() : undefined,
           spaceId,
           flairId: spaceId !== undefined && flairId.length > 0 ? flairId : undefined,
@@ -121,6 +132,7 @@ function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
             <TabsTrigger value="link">{t.composer.typeLink}</TabsTrigger>
             <TabsTrigger value="image">{t.composer.typeImage}</TabsTrigger>
             <TabsTrigger value="poll">{t.composer.typePoll}</TabsTrigger>
+            <TabsTrigger value="review">{t.composer.typeReview}</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -138,6 +150,12 @@ function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
             />
           </div>
           {spaceId !== undefined && <FlairSelect spaceId={spaceId} onChange={setFlairId} value={flairId} />}
+          {type !== "poll" && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">{type === "review" ? t.composer.work : t.composer.linkedWork}</span>
+              <WorkPicker onValueChange={setWorkId} placeholder={t.composer.searchWork} value={workId} />
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -153,7 +171,7 @@ function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
           />
         </div>
 
-        {type === "text" && (
+        {(type === "text" || type === "review") && (
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium" htmlFor="compose-body">
               {t.composer.body}
@@ -252,7 +270,7 @@ function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
         <Button onClick={() => setDialog({ open: false, spaceId: "" })} type="button" variant="outline">
           {t.common.cancel}
         </Button>
-        <Button isLoading={busy} type="submit">
+        <Button disabled={type === "review" && workId === undefined} isLoading={busy} type="submit">
           {t.composer.submit}
         </Button>
       </DialogFooter>
@@ -265,11 +283,12 @@ function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
  * +---------------------------------------+
  * | Create a post                     [x] |
  * |---------------------------------------|
- * | [Text | Link | Image | Poll]          |
+ * | [Text | Link | Image | Poll | Review] |
  * |  ^ TabsList max-w-full, scrolls if    |
  * |    labels exceed width                |
  * | Space [picker w-full]                 |
  * | Flair [select? w-full]                |
+ * | Work  [picker w-full] (hidden: poll)  |
  * | Title [input w-full max=300]          |
  * | Body / URL / Image / Poll ...         |
  * | [+ Add option]          (flex-wrap)   |
@@ -288,8 +307,9 @@ function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
  * +--------------------------------------------+
  * | Create a post                          [x] |
  * |--------------------------------------------|
- * | [Text | Link | Image | Poll]              |
+ * | [Text | Link | Image | Poll | Review]     |
  * | Space [picker]     | Flair [select?]      |
+ * | Work  [picker]       (hidden when poll)   |
  * | Title [input max=300]                     |
  * | Body / URL / Image / Poll options ...     |
  * | [sw NSFW]  [sw Spoiler]                   |
@@ -303,8 +323,9 @@ function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
  * +-----------------------------------------------+
  * | Create a post                             [x] |
  * |-----------------------------------------------|
- * | [Text | Link | Image | Poll]                 |
+ * | [Text | Link | Image | Poll | Review]        |
  * | Space [picker]     | Flair [select?]         |
+ * | Work  [picker]       (hidden when poll)      |
  * | Title [input max=300]                        |
  * | Body / URL / Image / Poll options ...        |
  * | [sw NSFW]  [sw Spoiler]                      |
@@ -320,6 +341,11 @@ function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
  * Width handling (same-row groups):
  * - Tabs row: TabsList w-fit max-w-full + overflow-x-auto, triggers
  *   whitespace-nowrap (scroll, never wrap or clip).
+ * - Space/Flair/Work grid: single column <640px, sm:grid-cols-2 above;
+ *   each picker w-full within its cell (stretched by grid).
+ * - Review mode: Work picker is required -- submit button stays disabled
+ *   until a work is selected; body uses the rich-text editor.
+ * - Poll mode: Work picker hidden entirely (polls cannot link works).
  * - Poll option row: [Input (md, min-w-0, shrinks) | [x] icon-md button
  *   shrink-0] -- equal height h-8.
  * - Poll footer row: flex-wrap justify-between; [Add option] (sm) and the
@@ -335,7 +361,7 @@ function ComposerForm({ initialSpaceId }: { readonly initialSpaceId: string }) {
  */
 export function PostComposeDialog() {
   const [t] = useT();
-  const { open, spaceId } = useAtomValue(postComposeDialogAtom);
+  const { open, spaceId, workId, isReview } = useAtomValue(postComposeDialogAtom);
   const setDialog = useAtomSet(postComposeDialogAtom);
   const [generation, setGeneration] = useState(0);
 
@@ -343,7 +369,7 @@ export function PostComposeDialog() {
     if (details.open) {
       setGeneration((g) => g + 1);
     }
-    setDialog({ open: details.open, spaceId: details.open ? spaceId : "" });
+    setDialog(details.open ? { open: true, spaceId, workId, isReview } : { open: false, spaceId: "" });
   }
 
   return (
@@ -358,7 +384,12 @@ export function PostComposeDialog() {
           }
         >
           <SectionBoundary>
-            <ComposerForm initialSpaceId={spaceId} key={generation} />
+            <ComposerForm
+              initialIsReview={isReview ?? false}
+              initialSpaceId={spaceId}
+              initialWorkId={workId}
+              key={generation}
+            />
           </SectionBoundary>
         </Suspense>
       </DialogContent>

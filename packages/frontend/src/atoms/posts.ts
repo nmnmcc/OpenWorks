@@ -57,6 +57,24 @@ export const workPostsPageQuery = (args: WorkPostsPageArgs) =>
     reactivityKeys: [Keys.posts],
   });
 
+export interface AuthorPostsPageArgs {
+  readonly authorId: string;
+  readonly kind?: "review" | "discussion";
+  readonly offset: number;
+}
+
+export const authorPostsPageQuery = (args: AuthorPostsPageArgs) =>
+  ApiClient.query("posts", "list", {
+    query: {
+      authorId: args.authorId,
+      kind: args.kind,
+      sort: "new",
+      limit: PAGE_SIZE,
+      offset: args.offset,
+    },
+    reactivityKeys: [Keys.posts],
+  });
+
 export const postQuery = (id: string) =>
   ApiClient.query("posts", "getById", {
     params: { id },

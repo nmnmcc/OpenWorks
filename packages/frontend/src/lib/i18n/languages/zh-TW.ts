@@ -28,6 +28,7 @@ export default {
     updatedAt: "更新時間",
     edited: "已編輯",
     noResults: "找不到結果",
+    viewAll: "查看全部",
   },
   nav: {
     home: "首頁",
@@ -71,6 +72,8 @@ export default {
     top: "最高分",
     empty: "還沒有貼文",
     emptyHint: "來發佈第一篇吧！",
+    newWorks: "最新作品",
+    popularWorks: "熱門作品",
   },
   post: {
     pinned: "置頂",
@@ -117,6 +120,10 @@ export default {
     typeLink: "連結",
     typeImage: "圖片",
     typePoll: "投票",
+    typeReview: "評測",
+    work: "作品",
+    linkedWork: "關聯作品（可選）",
+    searchWork: "搜尋作品…",
     postTitle: "標題",
     body: "內文",
     url: "連結網址",
@@ -191,6 +198,7 @@ export default {
     members: (n: number) => `${n} 位成員`,
     about: "社群簡介",
     rules: "社群規則",
+    relatedWorks: "相關作品",
     wiki: "Wiki",
     modTools: "版務工具",
     created: "建立於",
@@ -232,6 +240,7 @@ export default {
       invitations: "邀請",
       reports: "檢舉",
       log: "版務記錄",
+      works: "作品",
     },
     settings: {
       title: "社群設定",
@@ -256,6 +265,11 @@ export default {
       moveDown: "下移",
       empty: "還沒有規則",
       editTitle: "編輯規則",
+    },
+    works: {
+      title: "相關作品",
+      add: "新增",
+      empty: "尚無相關作品。",
     },
     flairs: {
       title: "貼文標籤",
@@ -358,6 +372,13 @@ export default {
     sendMessage: "傳私訊",
     editProfile: "編輯資料",
     noBio: "這位使用者還沒有填寫簡介。",
+    tabs: {
+      posts: "貼文",
+      reviews: "評測",
+      library: "收藏庫",
+      viewLibrary: "查看他的收藏庫",
+      viewShelves: "查看他的書架",
+    },
   },
   upload: {
     dropOrClick: "拖放圖片或點擊選擇",
@@ -391,6 +412,13 @@ export default {
     resultCount: (n: number) => `${n} 筆結果`,
     empty: "找不到相關內容",
     prompt: "在上方搜尋列輸入關鍵字開始搜尋",
+    tabs: {
+      posts: "貼文",
+      works: "作品",
+      creators: "創作者",
+      spaces: "社群",
+      users: "使用者",
+    },
   },
   invite: {
     title: "社群邀請",
@@ -540,6 +568,8 @@ export default {
     },
     overview: "概覽",
     content: "內容",
+    relatedSpaces: "相關社群",
+    startDiscussion: "發起討論",
     reviews: "評測",
     discussions: "討論",
     variants: "版本",

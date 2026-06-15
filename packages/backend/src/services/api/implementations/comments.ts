@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 import { v7 } from "uuid";
 
@@ -20,7 +20,17 @@ import {
   CommentTargetNotFound,
   PostLocked,
 } from "../interfaces/comments";
-import { CurrentUser } from "../interfaces/middlewares/auth";
+import { CurrentUser, CurrentUserOption } from "../interfaces/middlewares/auth";
+
+/** 可见评论的空间过滤：无空间、公开空间，以及（已登录时）自己加入的空间。 */
+const visibleSpaceFilters = (userId: string | undefined) =>
+  userId === undefined
+    ? [{ spaceId: { isNull: true as const } }, { space: { visibility: { ne: "private" as const } } }]
+    : [
+        { spaceId: { isNull: true as const } },
+        { space: { visibility: { ne: "private" as const } } },
+        { space: { members: { userId } } },
+      ];
 
 export const CommentsHandlers = HttpApiBuilder.group(
   Api,
@@ -34,7 +44,7 @@ export const CommentsHandlers = HttpApiBuilder.group(
     return handlers
       .handle("search", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const limit = query.limit ?? config.pagination.searchDefaultLimit;
           const offset = query.offset ?? 0;
 
@@ -63,15 +73,7 @@ export const CommentsHandlers = HttpApiBuilder.group(
             where: {
               id: { in: ids },
               removed: false,
-              OR: [
-                { spaceId: { isNull: true } },
-                {
-                  space: {
-                    visibility: { ne: "private" },
-                  },
-                },
-                { space: { members: { userId: user.id } } },
-              ],
+              OR: visibleSpaceFilters(userId),
             },
           });
 
@@ -96,19 +98,11 @@ export const CommentsHandlers = HttpApiBuilder.group(
       )
       .handle("list", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const rows = yield* database.query.comments.findMany({
             where: {
               postId: query.postId,
-              OR: [
-                { spaceId: { isNull: true } },
-                {
-                  space: {
-                    visibility: { ne: "private" },
-                  },
-                },
-                { space: { members: { userId: user.id } } },
-              ],
+              OR: visibleSpaceFilters(userId),
             },
             orderBy: { createdAt: "asc" },
           });
@@ -117,7 +111,7 @@ export const CommentsHandlers = HttpApiBuilder.group(
       )
       .handle("getById", ({ params }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const row = yield* database.query.comments.findFirst({
             where: { id: params.id },
           });
@@ -129,12 +123,15 @@ export const CommentsHandlers = HttpApiBuilder.group(
               where: { id: row.spaceId },
             });
             if (space && space.visibility === "private") {
-              const membership = yield* database.query.spaceMembers.findFirst({
-                where: {
-                  spaceId: space.id,
-                  userId: user.id,
-                },
-              });
+              const membership =
+                userId === undefined
+                  ? undefined
+                  : yield* database.query.spaceMembers.findFirst({
+                      where: {
+                        spaceId: space.id,
+                        userId,
+                      },
+                    });
               if (!membership) {
                 return yield* new CommentNotFound();
               }

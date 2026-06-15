@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
 import { PortableText } from "../../../libraries/portable-text";
-import { AuthMiddleware } from "./middlewares/auth";
+import { AuthMiddleware, OptionalAuthMiddleware } from "./middlewares/auth";
 
 export class Comment extends Schema.Class<Comment>("Comment")({
   id: Schema.String,
@@ -58,19 +58,19 @@ export class CommentsGroup extends HttpApiGroup.make("comments")
       },
       success: CommentSearchResult,
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("list", "/", {
       query: {
         postId: Schema.String,
       },
       success: Schema.Array(Comment),
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("getById", "/:id", {
       params: { id: Schema.String },
       success: Comment,
       error: [CommentNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("create", "/", {
       payload: Schema.Struct({
         content: PortableText,
@@ -79,7 +79,7 @@ export class CommentsGroup extends HttpApiGroup.make("comments")
       }),
       success: Comment,
       error: [CommentForbidden, CommentTargetNotFound, PostLocked, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.patch("update", "/:id", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -87,12 +87,12 @@ export class CommentsGroup extends HttpApiGroup.make("comments")
       }),
       success: Comment,
       error: [CommentNotFound, CommentForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("delete", "/:id", {
       params: { id: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [CommentNotFound, CommentForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("remove", "/:id/remove", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -100,7 +100,6 @@ export class CommentsGroup extends HttpApiGroup.make("comments")
       }),
       success: Comment,
       error: [CommentNotFound, CommentForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/comments") {}

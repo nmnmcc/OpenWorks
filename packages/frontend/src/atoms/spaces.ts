@@ -2,6 +2,11 @@ import { Keys } from "./keys";
 import { PAGE_SIZE } from "./posts";
 import { ApiClient } from "./runtime";
 
+export const spaceSearchQuery = (q: string, offset = 0) =>
+  ApiClient.query("spaces", "search", {
+    query: { q, limit: PAGE_SIZE, offset },
+  });
+
 export const spacesPageQuery = (offset: number) =>
   ApiClient.query("spaces", "list", {
     query: { limit: PAGE_SIZE, offset },
@@ -54,6 +59,20 @@ export const invitationsPageQuery = (spaceId: string, offset: number) =>
     reactivityKeys: [Keys.invitations(spaceId)],
   });
 
+export const spaceWorksPageQuery = (spaceId: string, offset: number) =>
+  ApiClient.query("spaces", "listWorks", {
+    params: { id: spaceId },
+    query: { limit: PAGE_SIZE, offset },
+    reactivityKeys: [Keys.spaceWorks(spaceId)],
+  });
+
+export const spaceWorksPreviewQuery = (spaceId: string) =>
+  ApiClient.query("spaces", "listWorks", {
+    params: { id: spaceId },
+    query: { limit: 5 },
+    reactivityKeys: [Keys.spaceWorks(spaceId)],
+  });
+
 export const createSpaceAtom = ApiClient.mutation("spaces", "create");
 export const updateSpaceAtom = ApiClient.mutation("spaces", "update");
 export const deleteSpaceAtom = ApiClient.mutation("spaces", "delete");
@@ -67,3 +86,5 @@ export const unmuteUserAtom = ApiClient.mutation("spaces", "unmute");
 export const createInvitationAtom = ApiClient.mutation("spaces", "createInvitation");
 export const revokeInvitationAtom = ApiClient.mutation("spaces", "revokeInvitation");
 export const acceptInvitationAtom = ApiClient.mutation("spaces", "acceptInvitation");
+export const addSpaceWorkAtom = ApiClient.mutation("spaces", "addWork");
+export const removeSpaceWorkAtom = ApiClient.mutation("spaces", "removeWork");

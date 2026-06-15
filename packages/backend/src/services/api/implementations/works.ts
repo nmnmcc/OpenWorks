@@ -1,5 +1,5 @@
 import { and, count, eq, sql } from "drizzle-orm";
-import { Effect, Match } from "effect";
+import { Effect, Match, Option } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 import { v7 } from "uuid";
 
@@ -16,7 +16,7 @@ import { workSystemRequirements } from "../../database/schema/work-system-requir
 import { workTagApplications, workTags } from "../../database/schema/work-tag";
 import { Search } from "../../search";
 import { Api } from "../interfaces";
-import { CurrentUser } from "../interfaces/middlewares/auth";
+import { CurrentUser, CurrentUserOption } from "../interfaces/middlewares/auth";
 import {
   AliasConflict,
   ChapterNotFound,
@@ -33,6 +33,7 @@ import {
   WorkRatingEntry,
   WorkRevisionEntry,
   WorkSearchResult,
+  WorkSpaceEntry,
   WorkSystemRequirementEntry,
   WorkTagEntry,
 } from "../interfaces/works";
@@ -198,6 +199,21 @@ export const WorksHandlers = HttpApiBuilder.group(
             return yield* new WorkNotFound();
           }
 
+          if (payload.targetWorkId !== undefined && payload.targetWorkId !== null) {
+            if (payload.targetWorkId === params.id) {
+              return yield* new InvalidWorkPayload();
+            }
+            const target = yield* database.query.works.findFirst({
+              where: { id: payload.targetWorkId },
+            });
+            if (!target) {
+              return yield* new WorkNotFound();
+            }
+            if (target.targetWorkId !== null) {
+              return yield* new InvalidWorkPayload();
+            }
+          }
+
           yield* database.insert(workRevisions).values({
             id: v7(),
             workId: params.id,
@@ -216,6 +232,7 @@ export const WorksHandlers = HttpApiBuilder.group(
               platforms: existing.platforms,
               website: existing.website,
               nsfw: existing.nsfw,
+              targetWorkId: existing.targetWorkId,
             },
             reason: payload.reason,
           });
@@ -241,6 +258,7 @@ export const WorksHandlers = HttpApiBuilder.group(
                   : undefined,
               website: payload.website,
               nsfw: payload.nsfw,
+              targetWorkId: payload.targetWorkId,
             })
             .where(eq(works.id, params.id))
             .returning();
@@ -304,6 +322,32 @@ export const WorksHandlers = HttpApiBuilder.group(
             where: { targetWorkId: params.id },
           });
           return rows.map((row) => new Work(row));
+        }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
+      )
+      .handle("getSpaces", ({ params, query }) =>
+        Effect.gen(function* () {
+          const existing = yield* database.query.works.findFirst({
+            where: { id: params.id },
+          });
+          if (!existing) {
+            return yield* new WorkNotFound();
+          }
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
+          const offset = query.offset ?? 0;
+          const rows = yield* database.query.spaceWorks.findMany({
+            where: {
+              workId: params.id,
+              space: { visibility: { ne: "private" } },
+            },
+            with: { space: true },
+            orderBy: { createdAt: "desc" },
+            limit,
+            offset,
+          });
+          return rows.flatMap((row) => {
+            if (!row.space) return [];
+            return [new WorkSpaceEntry(row.space)];
+          });
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
       )
       .handle("getCredits", ({ params }) =>
@@ -394,15 +438,18 @@ export const WorksHandlers = HttpApiBuilder.group(
       )
       .handle("getMyRating", ({ params }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const existing = yield* database.query.works.findFirst({
             where: { id: params.id },
           });
           if (!existing) {
             return yield* new WorkNotFound();
           }
+          if (userId === undefined) {
+            return null;
+          }
           const row = yield* database.query.workRatings.findFirst({
-            where: { userId: user.id, workId: params.id },
+            where: { userId, workId: params.id },
           });
           return row ? new WorkRatingEntry(row) : null;
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
@@ -503,7 +550,7 @@ export const WorksHandlers = HttpApiBuilder.group(
       )
       .handle("getTags", ({ params }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const existing = yield* database.query.works.findFirst({
             where: { id: params.id },
           });
@@ -522,9 +569,12 @@ export const WorksHandlers = HttpApiBuilder.group(
             .where(eq(workTagApplications.workId, params.id))
             .groupBy(workTagApplications.tagId, workTags.name);
 
-          const myApplications = yield* database.query.workTagApplications.findMany({
-            where: { workId: params.id, userId: user.id },
-          });
+          const myApplications =
+            userId === undefined
+              ? []
+              : yield* database.query.workTagApplications.findMany({
+                  where: { workId: params.id, userId },
+                });
           const myTagIds = new Set(myApplications.map((a) => a.tagId));
 
           return rows.map(
@@ -676,7 +726,7 @@ export const WorksHandlers = HttpApiBuilder.group(
       )
       .handle("getChapters", ({ params }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const existing = yield* database.query.works.findFirst({
             where: { id: params.id },
           });
@@ -687,12 +737,15 @@ export const WorksHandlers = HttpApiBuilder.group(
             where: { workId: params.id },
             orderBy: { position: "asc" },
           });
-          const progressRows = yield* database.query.chapterProgress.findMany({
-            where: {
-              userId: user.id,
-              chapterId: { in: rows.map((r) => r.id) },
-            },
-          });
+          const progressRows =
+            userId === undefined
+              ? []
+              : yield* database.query.chapterProgress.findMany({
+                  where: {
+                    userId,
+                    chapterId: { in: rows.map((r) => r.id) },
+                  },
+                });
           const readChapterIds = new Set(progressRows.map((p) => p.chapterId));
           return rows.map(
             (row) =>
@@ -868,6 +921,6 @@ export const WorksHandlers = HttpApiBuilder.group(
           });
           return rows.map((row) => new WorkSystemRequirementEntry(row));
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
-      )
+      );
   }),
 );

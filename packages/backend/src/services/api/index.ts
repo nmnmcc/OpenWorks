@@ -15,7 +15,7 @@ import { HiddenHandlers } from "./implementations/hidden";
 import { LibraryHandlers } from "./implementations/library";
 import { MediaHandlers } from "./implementations/media";
 import { MessagesHandlers } from "./implementations/messages";
-import { AuthMiddlewareLive } from "./implementations/middlewares/auth";
+import { AuthMiddlewareLive, OptionalAuthMiddlewareLive } from "./implementations/middlewares/auth";
 import { ModerationLogsHandlers } from "./implementations/moderation-log";
 import { NotificationsHandlers } from "./implementations/notifications";
 import { PollsHandlers } from "./implementations/polls";
@@ -37,7 +37,7 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
 }).pipe(
   Layer.provide([
     PostsHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
       Layer.provide(Search.layer),
@@ -45,7 +45,7 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(DatabasePool.layer),
     ),
     SpacesHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
       Layer.provide(Search.layer),
@@ -53,7 +53,7 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(DatabasePool.layer),
     ),
     CommentsHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
       Layer.provide(Search.layer),
@@ -68,7 +68,7 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(DatabasePool.layer),
     ),
     FlairsHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
       Layer.provide(Database.layer),
@@ -94,7 +94,7 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(DatabasePool.layer),
     ),
     RulesHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
       Layer.provide(Database.layer),
@@ -120,7 +120,7 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(DatabasePool.layer),
     ),
     WikiHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Authorization.layer),
       Layer.provide(Search.layer),
@@ -128,39 +128,39 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
       Layer.provide(DatabasePool.layer),
     ),
     UsersHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Search.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
     PollsHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
     WorksHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Search.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
     CreatorsHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
     LibraryHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),
     ),
     ShelvesHandlers.pipe(
-      Layer.provide(AuthMiddlewareLive),
+      Layer.provide([AuthMiddlewareLive, OptionalAuthMiddlewareLive]),
       Layer.provide(Auth.layer),
       Layer.provide(Database.layer),
       Layer.provide(DatabasePool.layer),

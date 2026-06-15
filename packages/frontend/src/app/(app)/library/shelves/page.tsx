@@ -10,11 +10,12 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useT } from "@/lib/i18n/locale";
 import { authClient } from "@/lib/auth-client";
+import { useT } from "@/lib/i18n/locale";
 import { useAtomSet } from "@effect/atom-react";
 import { BookmarkIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
+import { parseAsString, useQueryState } from "nuqs";
 import { useState, useTransition } from "react";
 
 function ShelfList({ ownerId }: { readonly ownerId?: string }) {
@@ -86,10 +87,13 @@ function ShelfList({ ownerId }: { readonly ownerId?: string }) {
  * 书架 Card 列表：图标(shrink-0) + 名称(flex-1 truncate) + 条目数(shrink-0)。
  * 新建书架通过 Dialog 弹窗。
  * 边界：0 个书架 → EmptyState。私有书架显示"Private"标签。
+ *       ?ownerId=<他人 id>（nuqs）→ 隐藏 Tabs，直接列该用户的公开书架
+ *       （后端按可见性过滤）；ownerId 为自己或缺省 → 正常 Tabs 模式。
  */
 export default function ShelvesPage() {
   const [t] = useT();
   const { data: session } = authClient.useSession();
+  const [ownerId] = useQueryState("ownerId", parseAsString);
   const createShelf = useAtomSet(createShelfAtom, { mode: "promise" });
   const [newShelfOpen, setNewShelfOpen] = useState(false);
   const [newShelfName, setNewShelfName] = useState("");
@@ -114,22 +118,28 @@ export default function ShelvesPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="mine">
-        <TabsList>
-          <TabsTrigger value="mine">{t.library.myShelves}</TabsTrigger>
-          <TabsTrigger value="public">{t.library.publicShelves}</TabsTrigger>
-        </TabsList>
-        <TabsContent value="mine">
-          <SectionBoundary>
-            <ShelfList ownerId={session?.user.id} />
-          </SectionBoundary>
-        </TabsContent>
-        <TabsContent value="public">
-          <SectionBoundary>
-            <ShelfList />
-          </SectionBoundary>
-        </TabsContent>
-      </Tabs>
+      {ownerId !== null && ownerId !== session?.user.id ? (
+        <SectionBoundary>
+          <ShelfList ownerId={ownerId} />
+        </SectionBoundary>
+      ) : (
+        <Tabs defaultValue="mine">
+          <TabsList>
+            <TabsTrigger value="mine">{t.library.myShelves}</TabsTrigger>
+            <TabsTrigger value="public">{t.library.publicShelves}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="mine">
+            <SectionBoundary>
+              <ShelfList ownerId={session?.user.id} />
+            </SectionBoundary>
+          </TabsContent>
+          <TabsContent value="public">
+            <SectionBoundary>
+              <ShelfList />
+            </SectionBoundary>
+          </TabsContent>
+        </Tabs>
+      )}
 
       <Dialog onOpenChange={(details) => setNewShelfOpen(details.open)} open={newShelfOpen}>
         <DialogContent>

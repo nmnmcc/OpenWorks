@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 import { v7 } from "uuid";
 
@@ -9,7 +9,7 @@ import { postFlairs } from "../../database/schema/post";
 import { userFlairs } from "../../database/schema/user-flair";
 import { Api } from "../interfaces";
 import { FlairForbidden, FlairNotFound, PostFlairEntry, UserFlairEntry } from "../interfaces/flairs";
-import { CurrentUser } from "../interfaces/middlewares/auth";
+import { CurrentUser, CurrentUserOption } from "../interfaces/middlewares/auth";
 
 export const FlairsHandlers = HttpApiBuilder.group(
   Api,
@@ -21,17 +21,20 @@ export const FlairsHandlers = HttpApiBuilder.group(
     return handlers
       .handle("listPostFlairs", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const space = yield* database.query.spaces.findFirst({
             where: { id: query.spaceId },
           });
           if (space && space.visibility === "private") {
-            const membership = yield* database.query.spaceMembers.findFirst({
-              where: {
-                spaceId: query.spaceId,
-                userId: user.id,
-              },
-            });
+            const membership =
+              userId === undefined
+                ? undefined
+                : yield* database.query.spaceMembers.findFirst({
+                    where: {
+                      spaceId: query.spaceId,
+                      userId,
+                    },
+                  });
             if (!membership) {
               return yield* new FlairForbidden();
             }
@@ -125,17 +128,20 @@ export const FlairsHandlers = HttpApiBuilder.group(
       )
       .handle("getUserFlair", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const space = yield* database.query.spaces.findFirst({
             where: { id: query.spaceId },
           });
           if (space && space.visibility === "private") {
-            const membership = yield* database.query.spaceMembers.findFirst({
-              where: {
-                spaceId: query.spaceId,
-                userId: user.id,
-              },
-            });
+            const membership =
+              userId === undefined
+                ? undefined
+                : yield* database.query.spaceMembers.findFirst({
+                    where: {
+                      spaceId: query.spaceId,
+                      userId,
+                    },
+                  });
             if (!membership) {
               return yield* new FlairForbidden();
             }

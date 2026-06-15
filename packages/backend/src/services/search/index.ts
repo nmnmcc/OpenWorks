@@ -1,8 +1,6 @@
-import { Context, Effect, Layer, Match, Option, Queue, Redacted, Stream } from "effect";
-import { Kafka, logLevel } from "kafkajs";
-import type { KafkaMessage } from "kafkajs";
-import { Meilisearch } from "meilisearch";
-import type { Index, SearchResponse } from "meilisearch";
+import { Context, Effect, Layer, Match, Queue, Stream } from "effect";
+import amqplib from "amqplib";
+import Typesense from "typesense";
 
 import { portableTextToPlainText } from "../../libraries/portable-text";
 import type { PortableTextBlock } from "../../libraries/portable-text";
@@ -22,7 +20,7 @@ export type PostDocument = {
   readonly title: string;
   readonly content: string;
   readonly authorId: string;
-  readonly spaceId: string | null;
+  readonly spaceId?: string;
   readonly createdAt: number;
 };
 
@@ -31,7 +29,7 @@ export type CommentDocument = {
   readonly content: string;
   readonly authorId: string;
   readonly postId: string;
-  readonly spaceId: string | null;
+  readonly spaceId?: string;
   readonly createdAt: number;
 };
 
@@ -137,393 +135,429 @@ export type WikiPageChange = DocumentChange<WikiPageDocument>;
 export type WorkChange = DocumentChange<WorkDocument>;
 export type CreatorChange = DocumentChange<CreatorDocument>;
 
-const applyChangesToIndex = <T extends { readonly id: string }>(
-  index: Index<T>,
-  changes: ReadonlyArray<DocumentChange<T>>,
-) =>
-  Effect.gen(function* () {
-    const latestById = new Map<string, DocumentChange<T>>();
-    for (const change of changes) {
-      const id = Match.value(change).pipe(
-        Match.tag("Upsert", (c) => c.document.id),
-        Match.tag("Delete", (c) => c.id),
-        Match.exhaustive,
-      );
-      latestById.set(id, change);
-    }
-
-    const deleteIds: string[] = [];
-    const documents: T[] = [];
-
-    for (const [, change] of latestById) {
-      Match.value(change).pipe(
-        Match.tag("Delete", (c) => deleteIds.push(c.id)),
-        Match.tag("Upsert", (c) => documents.push(c.document)),
-        Match.exhaustive,
-      );
-    }
-
-    if (deleteIds.length > 0) {
-      yield* Effect.tryPromise(() => index.deleteDocuments(deleteIds));
-    }
-
-    if (documents.length > 0) {
-      yield* Effect.tryPromise(() => index.addDocuments(documents));
-    }
-  });
+interface SearchResult<T> {
+  readonly hits: ReadonlyArray<T>;
+  readonly query: string;
+  readonly estimatedTotalHits: number;
+  readonly processingTimeMs: number;
+}
 
 export class Search extends Context.Service<Search>()("@openworks/backend/services/search/Search", {
   make: Effect.gen(function* () {
     const config = yield* Config;
     const database = yield* Database;
 
-    const apiKey = config.meilisearch.apiKey.pipe(Option.map(Redacted.value), Option.getOrUndefined);
-
-    const client = new Meilisearch({
-      host: config.meilisearch.url,
-      apiKey,
+    const client = new Typesense.Client({
+      nodes: [{ host: config.typesense.host, port: config.typesense.port, protocol: config.typesense.protocol }],
+      apiKey: config.typesense.apiKey,
+      connectionTimeoutSeconds: 2,
     });
 
-    yield* Effect.tryPromise(() => client.health());
+    yield* Effect.tryPromise(() => client.health.retrieve());
 
     const {
-      postsIndex: postsIndexName,
-      commentsIndex: commentsIndexName,
-      spacesIndex: spacesIndexName,
-      usersIndex: usersIndexName,
-      wikiPagesIndex: wikiPagesIndexName,
-      worksIndex: worksIndexName,
-      creatorsIndex: creatorsIndexName,
-    } = config.meilisearch;
+      postsCollection: postsCollectionName,
+      commentsCollection: commentsCollectionName,
+      spacesCollection: spacesCollectionName,
+      usersCollection: usersCollectionName,
+      wikiPagesCollection: wikiPagesCollectionName,
+      worksCollection: worksCollectionName,
+      creatorsCollection: creatorsCollectionName,
+    } = config.typesense;
 
-    yield* Effect.tryPromise(() => client.createIndex(postsIndexName, { primaryKey: "id" }).waitTask()).pipe(
-      Effect.ignore,
-    );
-    yield* Effect.tryPromise(() => client.createIndex(commentsIndexName, { primaryKey: "id" }).waitTask()).pipe(
-      Effect.ignore,
-    );
-    yield* Effect.tryPromise(() => client.createIndex(spacesIndexName, { primaryKey: "id" }).waitTask()).pipe(
-      Effect.ignore,
-    );
-    yield* Effect.tryPromise(() => client.createIndex(usersIndexName, { primaryKey: "id" }).waitTask()).pipe(
-      Effect.ignore,
-    );
-    yield* Effect.tryPromise(() => client.createIndex(wikiPagesIndexName, { primaryKey: "id" }).waitTask()).pipe(
-      Effect.ignore,
-    );
-    yield* Effect.tryPromise(() => client.createIndex(worksIndexName, { primaryKey: "id" }).waitTask()).pipe(
-      Effect.ignore,
-    );
-    yield* Effect.tryPromise(() => client.createIndex(creatorsIndexName, { primaryKey: "id" }).waitTask()).pipe(
-      Effect.ignore,
-    );
+    const collectionSchemas = [
+      {
+        name: postsCollectionName,
+        fields: [
+          { name: "title", type: "string" as const },
+          { name: "content", type: "string" as const },
+          { name: "authorId", type: "string" as const, facet: true },
+          { name: "spaceId", type: "string" as const, facet: true, optional: true },
+          { name: "createdAt", type: "int64" as const },
+        ],
+        default_sorting_field: "createdAt",
+      },
+      {
+        name: commentsCollectionName,
+        fields: [
+          { name: "content", type: "string" as const },
+          { name: "authorId", type: "string" as const, facet: true },
+          { name: "postId", type: "string" as const, facet: true },
+          { name: "spaceId", type: "string" as const, facet: true, optional: true },
+          { name: "createdAt", type: "int64" as const },
+        ],
+        default_sorting_field: "createdAt",
+      },
+      {
+        name: spacesCollectionName,
+        fields: [
+          { name: "name", type: "string" as const },
+          { name: "slug", type: "string" as const },
+          { name: "description", type: "string" as const },
+          { name: "memberCount", type: "int32" as const },
+          { name: "createdAt", type: "int64" as const },
+        ],
+        default_sorting_field: "createdAt",
+      },
+      {
+        name: usersCollectionName,
+        fields: [
+          { name: "name", type: "string" as const },
+          { name: "displayName", type: "string" as const },
+          { name: "bio", type: "string" as const },
+          { name: "createdAt", type: "int64" as const },
+        ],
+        default_sorting_field: "createdAt",
+      },
+      {
+        name: wikiPagesCollectionName,
+        fields: [
+          { name: "title", type: "string" as const },
+          { name: "content", type: "string" as const },
+          { name: "spaceId", type: "string" as const, facet: true },
+          { name: "createdAt", type: "int64" as const },
+        ],
+        default_sorting_field: "createdAt",
+      },
+      {
+        name: worksCollectionName,
+        fields: [
+          { name: "title", type: "string" as const },
+          { name: "originalTitle", type: "string" as const },
+          { name: "description", type: "string" as const },
+          { name: "aliases", type: "string" as const },
+          { name: "type", type: "string" as const, facet: true },
+          { name: "createdAt", type: "int64" as const },
+        ],
+        default_sorting_field: "createdAt",
+      },
+      {
+        name: creatorsCollectionName,
+        fields: [
+          { name: "name", type: "string" as const },
+          { name: "kind", type: "string" as const, facet: true },
+          { name: "bio", type: "string" as const },
+          { name: "createdAt", type: "int64" as const },
+        ],
+        default_sorting_field: "createdAt",
+      },
+    ];
 
-    yield* Effect.tryPromise(() =>
-      client
-        .index(postsIndexName)
-        .updateSettings({
-          searchableAttributes: ["title", "content"],
-          filterableAttributes: ["spaceId", "authorId"],
-          sortableAttributes: ["createdAt"],
-        })
-        .waitTask(),
-    );
+    for (const schema of collectionSchemas) {
+      yield* Effect.tryPromise(() => client.collections().create(schema)).pipe(Effect.ignore);
+    }
 
-    yield* Effect.tryPromise(() =>
-      client
-        .index(commentsIndexName)
-        .updateSettings({
-          searchableAttributes: ["content"],
-          filterableAttributes: ["postId", "spaceId", "authorId"],
-          sortableAttributes: ["createdAt"],
-        })
-        .waitTask(),
-    );
+    const applyChanges = <T extends { readonly id: string }>(
+      collectionName: string,
+      changes: ReadonlyArray<DocumentChange<T>>,
+    ) =>
+      Effect.gen(function* () {
+        const latestById = new Map<string, DocumentChange<T>>();
+        for (const change of changes) {
+          const id = Match.value(change).pipe(
+            Match.tag("Upsert", (c) => c.document.id),
+            Match.tag("Delete", (c) => c.id),
+            Match.exhaustive,
+          );
+          latestById.set(id, change);
+        }
 
-    yield* Effect.tryPromise(() =>
-      client
-        .index(spacesIndexName)
-        .updateSettings({
-          searchableAttributes: ["name", "slug", "description"],
-          sortableAttributes: ["memberCount", "createdAt"],
-        })
-        .waitTask(),
-    );
+        const deleteIds: string[] = [];
+        const documents: T[] = [];
 
-    yield* Effect.tryPromise(() =>
-      client
-        .index(usersIndexName)
-        .updateSettings({
-          searchableAttributes: ["name", "displayName", "bio"],
-          sortableAttributes: ["createdAt"],
-        })
-        .waitTask(),
-    );
+        for (const [, change] of latestById) {
+          Match.value(change).pipe(
+            Match.tag("Delete", (c) => deleteIds.push(c.id)),
+            Match.tag("Upsert", (c) => documents.push(c.document)),
+            Match.exhaustive,
+          );
+        }
 
-    yield* Effect.tryPromise(() =>
-      client
-        .index(wikiPagesIndexName)
-        .updateSettings({
-          searchableAttributes: ["title", "content"],
-          filterableAttributes: ["spaceId"],
-          sortableAttributes: ["createdAt"],
-        })
-        .waitTask(),
-    );
+        if (deleteIds.length > 0) {
+          yield* Effect.tryPromise(() =>
+            client.collections(collectionName).documents().delete({ filter_by: `id:[${deleteIds.join(",")}]` }),
+          ).pipe(Effect.ignore);
+        }
 
-    yield* Effect.tryPromise(() =>
-      client
-        .index(worksIndexName)
-        .updateSettings({
-          searchableAttributes: ["title", "originalTitle", "description", "aliases"],
-          filterableAttributes: ["type"],
-          sortableAttributes: ["createdAt"],
-        })
-        .waitTask(),
-    );
-
-    yield* Effect.tryPromise(() =>
-      client
-        .index(creatorsIndexName)
-        .updateSettings({
-          searchableAttributes: ["name", "bio"],
-          sortableAttributes: ["createdAt"],
-        })
-        .waitTask(),
-    );
-
-    const postsIndex = client.index<PostDocument>(postsIndexName);
-    const commentsIndex = client.index<CommentDocument>(commentsIndexName);
-    const spacesIndex = client.index<SpaceDocument>(spacesIndexName);
-    const usersIndex = client.index<UserDocument>(usersIndexName);
-    const wikiPagesIndex = client.index<WikiPageDocument>(wikiPagesIndexName);
-    const worksIndex = client.index<WorkDocument>(worksIndexName);
-    const creatorsIndex = client.index<CreatorDocument>(creatorsIndexName);
+        if (documents.length > 0) {
+          yield* Effect.tryPromise(() =>
+            client.collections(collectionName).documents().import(documents, { action: "upsert" }),
+          );
+        }
+      });
 
     const searchPosts = (options: SearchPostsOptions) =>
-      Effect.tryPromise(
-        (): Promise<SearchResponse<PostDocument>> =>
-          postsIndex.search(options.q, {
-            filter: options.spaceId ? `spaceId = "${options.spaceId}"` : undefined,
-            sort: ["createdAt:desc"],
-            limit: options.limit,
-            offset: options.offset,
-          }),
-      );
+      Effect.tryPromise(async (): Promise<SearchResult<PostDocument>> => {
+        const result = await client.collections<PostDocument>(postsCollectionName).documents().search({
+          q: options.q,
+          query_by: "title,content",
+          filter_by: options.spaceId ? `spaceId:=${options.spaceId}` : undefined,
+          sort_by: "createdAt:desc",
+          per_page: options.limit,
+          page: Math.floor(options.offset / options.limit) + 1,
+        });
+        return {
+          hits: (result.hits ?? []).map((h) => h.document),
+          query: options.q,
+          estimatedTotalHits: result.found,
+          processingTimeMs: result.search_time_ms,
+        };
+      });
 
     const searchComments = (options: SearchCommentsOptions) =>
-      Effect.tryPromise((): Promise<SearchResponse<CommentDocument>> => {
+      Effect.tryPromise(async (): Promise<SearchResult<CommentDocument>> => {
         const filter =
           [
-            options.postId ? `postId = "${options.postId}"` : undefined,
-            options.spaceId ? `spaceId = "${options.spaceId}"` : undefined,
+            options.postId ? `postId:=${options.postId}` : undefined,
+            options.spaceId ? `spaceId:=${options.spaceId}` : undefined,
           ]
             .filter((f): f is string => f !== undefined)
-            .join(" AND ") || undefined;
-        return commentsIndex.search(options.q, {
-          filter,
-          sort: ["createdAt:desc"],
-          limit: options.limit,
-          offset: options.offset,
+            .join(" && ") || undefined;
+        const result = await client.collections<CommentDocument>(commentsCollectionName).documents().search({
+          q: options.q,
+          query_by: "content",
+          filter_by: filter,
+          sort_by: "createdAt:desc",
+          per_page: options.limit,
+          page: Math.floor(options.offset / options.limit) + 1,
         });
+        return {
+          hits: (result.hits ?? []).map((h) => h.document),
+          query: options.q,
+          estimatedTotalHits: result.found,
+          processingTimeMs: result.search_time_ms,
+        };
       });
 
     const searchSpaces = (options: SearchSpacesOptions) =>
-      Effect.tryPromise(
-        (): Promise<SearchResponse<SpaceDocument>> =>
-          spacesIndex.search(options.q, {
-            sort: ["memberCount:desc", "createdAt:desc"],
-            limit: options.limit,
-            offset: options.offset,
-          }),
-      );
+      Effect.tryPromise(async (): Promise<SearchResult<SpaceDocument>> => {
+        const result = await client.collections<SpaceDocument>(spacesCollectionName).documents().search({
+          q: options.q,
+          query_by: "name,slug,description",
+          sort_by: "memberCount:desc,createdAt:desc",
+          per_page: options.limit,
+          page: Math.floor(options.offset / options.limit) + 1,
+        });
+        return {
+          hits: (result.hits ?? []).map((h) => h.document),
+          query: options.q,
+          estimatedTotalHits: result.found,
+          processingTimeMs: result.search_time_ms,
+        };
+      });
 
     const searchUsers = (options: SearchUsersOptions) =>
-      Effect.tryPromise(
-        (): Promise<SearchResponse<UserDocument>> =>
-          usersIndex.search(options.q, {
-            limit: options.limit,
-            offset: options.offset,
-          }),
-      );
+      Effect.tryPromise(async (): Promise<SearchResult<UserDocument>> => {
+        const result = await client.collections<UserDocument>(usersCollectionName).documents().search({
+          q: options.q,
+          query_by: "name,displayName,bio",
+          per_page: options.limit,
+          page: Math.floor(options.offset / options.limit) + 1,
+        });
+        return {
+          hits: (result.hits ?? []).map((h) => h.document),
+          query: options.q,
+          estimatedTotalHits: result.found,
+          processingTimeMs: result.search_time_ms,
+        };
+      });
 
     const searchWikiPages = (options: SearchWikiPagesOptions) =>
-      Effect.tryPromise(
-        (): Promise<SearchResponse<WikiPageDocument>> =>
-          wikiPagesIndex.search(options.q, {
-            filter: options.spaceId ? `spaceId = "${options.spaceId}"` : undefined,
-            sort: ["createdAt:desc"],
-            limit: options.limit,
-            offset: options.offset,
-          }),
-      );
+      Effect.tryPromise(async (): Promise<SearchResult<WikiPageDocument>> => {
+        const result = await client.collections<WikiPageDocument>(wikiPagesCollectionName).documents().search({
+          q: options.q,
+          query_by: "title,content",
+          filter_by: options.spaceId ? `spaceId:=${options.spaceId}` : undefined,
+          sort_by: "createdAt:desc",
+          per_page: options.limit,
+          page: Math.floor(options.offset / options.limit) + 1,
+        });
+        return {
+          hits: (result.hits ?? []).map((h) => h.document),
+          query: options.q,
+          estimatedTotalHits: result.found,
+          processingTimeMs: result.search_time_ms,
+        };
+      });
 
     const searchWorks = (options: SearchWorksOptions) =>
-      Effect.tryPromise(
-        (): Promise<SearchResponse<WorkDocument>> =>
-          worksIndex.search(options.q, {
-            filter: options.type ? `type = "${options.type}"` : undefined,
-            sort: ["createdAt:desc"],
-            limit: options.limit,
-            offset: options.offset,
-          }),
-      );
+      Effect.tryPromise(async (): Promise<SearchResult<WorkDocument>> => {
+        const result = await client.collections<WorkDocument>(worksCollectionName).documents().search({
+          q: options.q,
+          query_by: "title,originalTitle,description,aliases",
+          filter_by: options.type ? `type:=${options.type}` : undefined,
+          sort_by: "createdAt:desc",
+          per_page: options.limit,
+          page: Math.floor(options.offset / options.limit) + 1,
+        });
+        return {
+          hits: (result.hits ?? []).map((h) => h.document),
+          query: options.q,
+          estimatedTotalHits: result.found,
+          processingTimeMs: result.search_time_ms,
+        };
+      });
 
     const searchCreators = (options: SearchCreatorsOptions) =>
-      Effect.tryPromise(
-        (): Promise<SearchResponse<CreatorDocument>> =>
-          creatorsIndex.search(options.q, {
-            sort: ["createdAt:desc"],
-            limit: options.limit,
-            offset: options.offset,
-          }),
-      );
+      Effect.tryPromise(async (): Promise<SearchResult<CreatorDocument>> => {
+        const result = await client.collections<CreatorDocument>(creatorsCollectionName).documents().search({
+          q: options.q,
+          query_by: "name,bio",
+          sort_by: "createdAt:desc",
+          per_page: options.limit,
+          page: Math.floor(options.offset / options.limit) + 1,
+        });
+        return {
+          hits: (result.hits ?? []).map((h) => h.document),
+          query: options.q,
+          estimatedTotalHits: result.found,
+          processingTimeMs: result.search_time_ms,
+        };
+      });
 
     const reindexAll = Effect.gen(function* () {
-      yield* Effect.tryPromise(() => postsIndex.deleteAllDocuments().waitTask());
+      for (const schema of collectionSchemas) {
+        yield* Effect.tryPromise(() => client.collections(schema.name).delete()).pipe(Effect.ignore);
+        yield* Effect.tryPromise(() => client.collections().create(schema));
+      }
+
       const postRows = yield* database.select().from(posts);
       if (postRows.length > 0) {
         yield* Effect.tryPromise(() =>
-          postsIndex
-            .addDocuments(
-              postRows.map(
-                (row): PostDocument => ({
-                  id: row.id,
-                  title: row.title,
-                  content: row.content ? portableTextToPlainText(row.content) : "",
-                  authorId: row.authorId,
-                  spaceId: row.spaceId,
-                  createdAt: row.createdAt.getTime(),
-                }),
-              ),
-            )
-            .waitTask(),
+          client
+            .collections(postsCollectionName)
+            .documents()
+            .import(
+              postRows.map((row) => ({
+                id: row.id,
+                title: row.title,
+                content: row.content ? portableTextToPlainText(row.content) : "",
+                authorId: row.authorId,
+                spaceId: row.spaceId ?? undefined,
+                createdAt: row.createdAt.getTime(),
+              })),
+              { action: "upsert" },
+            ),
         );
       }
 
-      yield* Effect.tryPromise(() => commentsIndex.deleteAllDocuments().waitTask());
       const commentRows = yield* database.select().from(comments);
       if (commentRows.length > 0) {
         yield* Effect.tryPromise(() =>
-          commentsIndex
-            .addDocuments(
-              commentRows.map(
-                (row): CommentDocument => ({
-                  id: row.id,
-                  content: portableTextToPlainText(row.content),
-                  authorId: row.authorId,
-                  postId: row.postId,
-                  spaceId: row.spaceId,
-                  createdAt: row.createdAt.getTime(),
-                }),
-              ),
-            )
-            .waitTask(),
+          client
+            .collections(commentsCollectionName)
+            .documents()
+            .import(
+              commentRows.map((row) => ({
+                id: row.id,
+                content: portableTextToPlainText(row.content),
+                authorId: row.authorId,
+                postId: row.postId,
+                spaceId: row.spaceId ?? undefined,
+                createdAt: row.createdAt.getTime(),
+              })),
+              { action: "upsert" },
+            ),
         );
       }
 
-      yield* Effect.tryPromise(() => spacesIndex.deleteAllDocuments().waitTask());
       const spaceRows = yield* database.select().from(spaces);
       if (spaceRows.length > 0) {
         yield* Effect.tryPromise(() =>
-          spacesIndex
-            .addDocuments(
-              spaceRows.map(
-                (row): SpaceDocument => ({
-                  id: row.id,
-                  name: row.name,
-                  slug: row.slug,
-                  description: row.description ?? "",
-                  memberCount: row.memberCount,
-                  createdAt: row.createdAt.getTime(),
-                }),
-              ),
-            )
-            .waitTask(),
+          client
+            .collections(spacesCollectionName)
+            .documents()
+            .import(
+              spaceRows.map((row) => ({
+                id: row.id,
+                name: row.name,
+                slug: row.slug,
+                description: row.description ?? "",
+                memberCount: row.memberCount,
+                createdAt: row.createdAt.getTime(),
+              })),
+              { action: "upsert" },
+            ),
         );
       }
 
-      yield* Effect.tryPromise(() => usersIndex.deleteAllDocuments().waitTask());
       const userRows = yield* database.select().from(users);
       if (userRows.length > 0) {
         yield* Effect.tryPromise(() =>
-          usersIndex
-            .addDocuments(
-              userRows.map(
-                (row): UserDocument => ({
-                  id: row.id,
-                  name: row.name,
-                  displayName: row.displayName ?? "",
-                  bio: row.bio ?? "",
-                  createdAt: row.createdAt.getTime(),
-                }),
-              ),
-            )
-            .waitTask(),
+          client
+            .collections(usersCollectionName)
+            .documents()
+            .import(
+              userRows.map((row) => ({
+                id: row.id,
+                name: row.name,
+                displayName: row.displayName ?? "",
+                bio: row.bio ?? "",
+                createdAt: row.createdAt.getTime(),
+              })),
+              { action: "upsert" },
+            ),
         );
       }
 
-      yield* Effect.tryPromise(() => wikiPagesIndex.deleteAllDocuments().waitTask());
       const wikiPageRows = yield* database.select().from(wikiPages);
       if (wikiPageRows.length > 0) {
         yield* Effect.tryPromise(() =>
-          wikiPagesIndex
-            .addDocuments(
-              wikiPageRows.map(
-                (row): WikiPageDocument => ({
-                  id: row.id,
-                  title: row.title,
-                  content: portableTextToPlainText(row.content),
-                  spaceId: row.spaceId,
-                  createdAt: row.createdAt.getTime(),
-                }),
-              ),
-            )
-            .waitTask(),
+          client
+            .collections(wikiPagesCollectionName)
+            .documents()
+            .import(
+              wikiPageRows.map((row) => ({
+                id: row.id,
+                title: row.title,
+                content: portableTextToPlainText(row.content),
+                spaceId: row.spaceId,
+                createdAt: row.createdAt.getTime(),
+              })),
+              { action: "upsert" },
+            ),
         );
       }
 
-      yield* Effect.tryPromise(() => worksIndex.deleteAllDocuments().waitTask());
       const workRows = yield* database.select().from(works);
       const aliasRows = workRows.length > 0 ? yield* database.select().from(workAliases) : [];
       const aliasesByWorkId = Map.groupBy(aliasRows, (row) => row.workId);
       if (workRows.length > 0) {
         yield* Effect.tryPromise(() =>
-          worksIndex
-            .addDocuments(
-              workRows.map(
-                (row): WorkDocument => ({
-                  id: row.id,
-                  title: row.title,
-                  originalTitle: row.originalTitle ?? "",
-                  description: row.description ? portableTextToPlainText(row.description) : "",
-                  aliases: (aliasesByWorkId.get(row.id) ?? []).map((a) => a.value).join(" "),
-                  type: row.type,
-                  createdAt: row.createdAt.getTime(),
-                }),
-              ),
-            )
-            .waitTask(),
+          client
+            .collections(worksCollectionName)
+            .documents()
+            .import(
+              workRows.map((row) => ({
+                id: row.id,
+                title: row.title,
+                originalTitle: row.originalTitle ?? "",
+                description: row.description ? portableTextToPlainText(row.description) : "",
+                aliases: (aliasesByWorkId.get(row.id) ?? []).map((a) => a.value).join(" "),
+                type: row.type,
+                createdAt: row.createdAt.getTime(),
+              })),
+              { action: "upsert" },
+            ),
         );
       }
 
-      yield* Effect.tryPromise(() => creatorsIndex.deleteAllDocuments().waitTask());
       const creatorRows = yield* database.select().from(creators);
       if (creatorRows.length > 0) {
         yield* Effect.tryPromise(() =>
-          creatorsIndex
-            .addDocuments(
-              creatorRows.map(
-                (row): CreatorDocument => ({
-                  id: row.id,
-                  name: row.name,
-                  kind: row.kind,
-                  bio: row.bio ? portableTextToPlainText(row.bio) : "",
-                  createdAt: row.createdAt.getTime(),
-                }),
-              ),
-            )
-            .waitTask(),
+          client
+            .collections(creatorsCollectionName)
+            .documents()
+            .import(
+              creatorRows.map((row) => ({
+                id: row.id,
+                name: row.name,
+                kind: row.kind,
+                bio: row.bio ? portableTextToPlainText(row.bio) : "",
+                createdAt: row.createdAt.getTime(),
+              })),
+              { action: "upsert" },
+            ),
         );
       }
 
@@ -546,13 +580,14 @@ export class Search extends Context.Service<Search>()("@openworks/backend/servic
       searchWikiPages,
       searchWorks,
       searchCreators,
-      applyPostChanges: (changes: ReadonlyArray<PostChange>) => applyChangesToIndex(postsIndex, changes),
-      applyCommentChanges: (changes: ReadonlyArray<CommentChange>) => applyChangesToIndex(commentsIndex, changes),
-      applySpaceChanges: (changes: ReadonlyArray<SpaceChange>) => applyChangesToIndex(spacesIndex, changes),
-      applyUserChanges: (changes: ReadonlyArray<UserChange>) => applyChangesToIndex(usersIndex, changes),
-      applyWikiPageChanges: (changes: ReadonlyArray<WikiPageChange>) => applyChangesToIndex(wikiPagesIndex, changes),
-      applyWorkChanges: (changes: ReadonlyArray<WorkChange>) => applyChangesToIndex(worksIndex, changes),
-      applyCreatorChanges: (changes: ReadonlyArray<CreatorChange>) => applyChangesToIndex(creatorsIndex, changes),
+      applyPostChanges: (changes: ReadonlyArray<PostChange>) => applyChanges(postsCollectionName, changes),
+      applyCommentChanges: (changes: ReadonlyArray<CommentChange>) => applyChanges(commentsCollectionName, changes),
+      applySpaceChanges: (changes: ReadonlyArray<SpaceChange>) => applyChanges(spacesCollectionName, changes),
+      applyUserChanges: (changes: ReadonlyArray<UserChange>) => applyChanges(usersCollectionName, changes),
+      applyWikiPageChanges: (changes: ReadonlyArray<WikiPageChange>) =>
+        applyChanges(wikiPagesCollectionName, changes),
+      applyWorkChanges: (changes: ReadonlyArray<WorkChange>) => applyChanges(worksCollectionName, changes),
+      applyCreatorChanges: (changes: ReadonlyArray<CreatorChange>) => applyChanges(creatorsCollectionName, changes),
       reindexAll,
     };
   }),
@@ -629,11 +664,11 @@ interface ChangeEvent<TRow> {
   readonly record: TRow;
 }
 
-interface PendingBatch {
-  readonly topic: string;
-  readonly messages: ReadonlyArray<KafkaMessage>;
-  readonly resolve: () => void;
-  readonly reject: (error: unknown) => void;
+interface PendingMessage {
+  readonly table: string;
+  readonly content: Buffer;
+  readonly ack: () => void;
+  readonly nack: () => void;
 }
 
 export namespace Search {
@@ -641,8 +676,8 @@ export namespace Search {
 
   /**
    * 索引同步守护进程：消费 Sequin 从 Postgres WAL 捕获、
-   * 经 Kafka 投递的变更事件，按批写入 Meilisearch。
-   * 处理失败时不前进消费位点，由 Kafka 重投；upsert/delete 幂等，
+   * 经 RabbitMQ 投递的变更事件，逐条写入 Typesense。
+   * 处理失败时 nack 并 requeue，由 RabbitMQ 重投；upsert/delete 幂等，
    * 因此 at-least-once 投递即可保证索引收敛。
    * 数据库写入是唯一的索引写入路径，API 层不直接写索引。
    */
@@ -651,54 +686,76 @@ export namespace Search {
       const config = yield* Config;
       const search = yield* Search;
 
-      const kafka = new Kafka({
-        clientId: "openworks-backend",
-        brokers: config.kafka.brokers,
-        logLevel: logLevel.ERROR,
-      });
-
-      const consumer = yield* Effect.acquireRelease(
-        Effect.tryPromise(async () => {
-          const consumer = kafka.consumer({ groupId: config.kafka.consumerGroup });
-          await consumer.connect();
-          await consumer.subscribe({
-            topics: [
-              config.kafka.postsTopic,
-              config.kafka.commentsTopic,
-              config.kafka.spacesTopic,
-              config.kafka.usersTopic,
-              config.kafka.wikiPagesTopic,
-              config.kafka.worksTopic,
-              config.kafka.creatorsTopic,
-              config.kafka.workAliasesTopic,
-            ],
-            fromBeginning: true,
-          });
-          return consumer;
-        }),
-        (consumer) => Effect.promise(() => consumer.disconnect()),
+      const connection = yield* Effect.acquireRelease(
+        Effect.tryPromise(() => amqplib.connect(config.rabbitmq.url)),
+        (conn) => Effect.promise(() => conn.close()),
       );
 
-      const batches = Stream.callback<PendingBatch>((queue) =>
-        Effect.tryPromise(() =>
-          consumer.run({
-            eachBatch: ({ batch }) =>
-              new Promise((resolve, reject) => {
-                Queue.offerUnsafe(queue, { topic: batch.topic, messages: batch.messages, resolve, reject });
-              }),
-          }),
-        ),
+      const channel = yield* Effect.acquireRelease(
+        Effect.tryPromise(async () => {
+          const ch = await connection.createChannel();
+          await ch.prefetch(1);
+          return ch;
+        }),
+        (ch) => Effect.promise(() => ch.close()),
+      );
+
+      yield* Effect.tryPromise(() =>
+        channel.assertExchange(config.rabbitmq.exchange, "topic", { durable: true }),
+      );
+
+      const tables = [
+        "posts",
+        "comments",
+        "spaces",
+        "users",
+        "wiki_pages",
+        "works",
+        "creators",
+        "work_aliases",
+      ] as const;
+
+      for (const table of tables) {
+        const queue = `openworks-search.${table}`;
+        yield* Effect.tryPromise(async () => {
+          await channel.assertQueue(queue, { durable: true });
+          await channel.bindQueue(
+            queue,
+            config.rabbitmq.exchange,
+            `${config.rabbitmq.routingKeyPrefix}.${table}.*`,
+          );
+        });
+      }
+
+      const messages = Stream.callback<PendingMessage>((effectQueue) =>
+        Effect.tryPromise(async () => {
+          for (const table of tables) {
+            await channel.consume(
+              `openworks-search.${table}`,
+              (msg) => {
+                if (!msg) return;
+                Queue.offerUnsafe(effectQueue, {
+                  table,
+                  content: msg.content,
+                  ack: () => channel.ack(msg),
+                  nack: () => channel.nack(msg, false, true),
+                });
+              },
+              { noAck: false },
+            );
+          }
+        }),
       );
 
       yield* Effect.forkScoped(
-        Stream.runForEach(batches, ({ topic, messages, resolve, reject }) =>
+        Stream.runForEach(messages, ({ table, content, ack, nack }) =>
           Effect.gen(function* () {
-            if (topic === config.kafka.postsTopic) {
-              const changes = messages.flatMap((message): ReadonlyArray<PostChange> => {
-                if (!message.value) return [];
-                const event: ChangeEvent<PostChangeRow> = JSON.parse(message.value.toString());
-                if (event.action === "delete") return [{ _tag: "Delete", id: event.record.id }];
-                return [
+            if (table === "posts") {
+              const event: ChangeEvent<PostChangeRow> = JSON.parse(content.toString());
+              if (event.action === "delete") {
+                yield* search.applyPostChanges([{ _tag: "Delete", id: event.record.id }]);
+              } else {
+                yield* search.applyPostChanges([
                   {
                     _tag: "Upsert",
                     document: {
@@ -706,19 +763,18 @@ export namespace Search {
                       title: event.record.title,
                       content: event.record.content ? portableTextToPlainText(event.record.content) : "",
                       authorId: event.record.author_id,
-                      spaceId: event.record.space_id,
+                      spaceId: event.record.space_id ?? undefined,
                       createdAt: new Date(event.record.created_at).getTime(),
                     },
                   },
-                ];
-              });
-              yield* search.applyPostChanges(changes);
-            } else if (topic === config.kafka.commentsTopic) {
-              const changes = messages.flatMap((message): ReadonlyArray<CommentChange> => {
-                if (!message.value) return [];
-                const event: ChangeEvent<CommentChangeRow> = JSON.parse(message.value.toString());
-                if (event.action === "delete") return [{ _tag: "Delete", id: event.record.id }];
-                return [
+                ]);
+              }
+            } else if (table === "comments") {
+              const event: ChangeEvent<CommentChangeRow> = JSON.parse(content.toString());
+              if (event.action === "delete") {
+                yield* search.applyCommentChanges([{ _tag: "Delete", id: event.record.id }]);
+              } else {
+                yield* search.applyCommentChanges([
                   {
                     _tag: "Upsert",
                     document: {
@@ -726,19 +782,18 @@ export namespace Search {
                       content: event.record.content ? portableTextToPlainText(event.record.content) : "",
                       authorId: event.record.author_id,
                       postId: event.record.post_id,
-                      spaceId: event.record.space_id,
+                      spaceId: event.record.space_id ?? undefined,
                       createdAt: new Date(event.record.created_at).getTime(),
                     },
                   },
-                ];
-              });
-              yield* search.applyCommentChanges(changes);
-            } else if (topic === config.kafka.spacesTopic) {
-              const changes = messages.flatMap((message): ReadonlyArray<SpaceChange> => {
-                if (!message.value) return [];
-                const event: ChangeEvent<SpaceChangeRow> = JSON.parse(message.value.toString());
-                if (event.action === "delete") return [{ _tag: "Delete", id: event.record.id }];
-                return [
+                ]);
+              }
+            } else if (table === "spaces") {
+              const event: ChangeEvent<SpaceChangeRow> = JSON.parse(content.toString());
+              if (event.action === "delete") {
+                yield* search.applySpaceChanges([{ _tag: "Delete", id: event.record.id }]);
+              } else {
+                yield* search.applySpaceChanges([
                   {
                     _tag: "Upsert",
                     document: {
@@ -750,15 +805,14 @@ export namespace Search {
                       createdAt: new Date(event.record.created_at).getTime(),
                     },
                   },
-                ];
-              });
-              yield* search.applySpaceChanges(changes);
-            } else if (topic === config.kafka.usersTopic) {
-              const changes = messages.flatMap((message): ReadonlyArray<UserChange> => {
-                if (!message.value) return [];
-                const event: ChangeEvent<UserChangeRow> = JSON.parse(message.value.toString());
-                if (event.action === "delete") return [{ _tag: "Delete", id: event.record.id }];
-                return [
+                ]);
+              }
+            } else if (table === "users") {
+              const event: ChangeEvent<UserChangeRow> = JSON.parse(content.toString());
+              if (event.action === "delete") {
+                yield* search.applyUserChanges([{ _tag: "Delete", id: event.record.id }]);
+              } else {
+                yield* search.applyUserChanges([
                   {
                     _tag: "Upsert",
                     document: {
@@ -769,15 +823,14 @@ export namespace Search {
                       createdAt: new Date(event.record.created_at).getTime(),
                     },
                   },
-                ];
-              });
-              yield* search.applyUserChanges(changes);
-            } else if (topic === config.kafka.wikiPagesTopic) {
-              const changes = messages.flatMap((message): ReadonlyArray<WikiPageChange> => {
-                if (!message.value) return [];
-                const event: ChangeEvent<WikiPageChangeRow> = JSON.parse(message.value.toString());
-                if (event.action === "delete") return [{ _tag: "Delete", id: event.record.id }];
-                return [
+                ]);
+              }
+            } else if (table === "wiki_pages") {
+              const event: ChangeEvent<WikiPageChangeRow> = JSON.parse(content.toString());
+              if (event.action === "delete") {
+                yield* search.applyWikiPageChanges([{ _tag: "Delete", id: event.record.id }]);
+              } else {
+                yield* search.applyWikiPageChanges([
                   {
                     _tag: "Upsert",
                     document: {
@@ -788,15 +841,14 @@ export namespace Search {
                       createdAt: new Date(event.record.created_at).getTime(),
                     },
                   },
-                ];
-              });
-              yield* search.applyWikiPageChanges(changes);
-            } else if (topic === config.kafka.worksTopic) {
-              const changes = messages.flatMap((message): ReadonlyArray<WorkChange> => {
-                if (!message.value) return [];
-                const event: ChangeEvent<WorkChangeRow> = JSON.parse(message.value.toString());
-                if (event.action === "delete") return [{ _tag: "Delete", id: event.record.id }];
-                return [
+                ]);
+              }
+            } else if (table === "works") {
+              const event: ChangeEvent<WorkChangeRow> = JSON.parse(content.toString());
+              if (event.action === "delete") {
+                yield* search.applyWorkChanges([{ _tag: "Delete", id: event.record.id }]);
+              } else {
+                yield* search.applyWorkChanges([
                   {
                     _tag: "Upsert",
                     document: {
@@ -811,15 +863,14 @@ export namespace Search {
                       createdAt: new Date(event.record.created_at).getTime(),
                     },
                   },
-                ];
-              });
-              yield* search.applyWorkChanges(changes);
-            } else if (topic === config.kafka.creatorsTopic) {
-              const changes = messages.flatMap((message): ReadonlyArray<CreatorChange> => {
-                if (!message.value) return [];
-                const event: ChangeEvent<CreatorChangeRow> = JSON.parse(message.value.toString());
-                if (event.action === "delete") return [{ _tag: "Delete", id: event.record.id }];
-                return [
+                ]);
+              }
+            } else if (table === "creators") {
+              const event: ChangeEvent<CreatorChangeRow> = JSON.parse(content.toString());
+              if (event.action === "delete") {
+                yield* search.applyCreatorChanges([{ _tag: "Delete", id: event.record.id }]);
+              } else {
+                yield* search.applyCreatorChanges([
                   {
                     _tag: "Upsert",
                     document: {
@@ -830,16 +881,12 @@ export namespace Search {
                       createdAt: new Date(event.record.created_at).getTime(),
                     },
                   },
-                ];
-              });
-              yield* search.applyCreatorChanges(changes);
-            } else if (topic === config.kafka.workAliasesTopic) {
-              const affectedWorkIds = new Set<string>();
-              for (const message of messages) {
-                if (!message.value) continue;
-                const event: ChangeEvent<WorkAliasChangeRow> = JSON.parse(message.value.toString());
-                affectedWorkIds.add(event.record.work_id);
+                ]);
               }
+            } else if (table === "work_aliases") {
+              const affectedWorkIds = new Set<string>();
+              const event: ChangeEvent<WorkAliasChangeRow> = JSON.parse(content.toString());
+              affectedWorkIds.add(event.record.work_id);
               if (affectedWorkIds.size > 0) {
                 const database = yield* Database;
                 const workIds = [...affectedWorkIds];
@@ -867,10 +914,10 @@ export namespace Search {
             }
           }).pipe(
             Effect.matchCauseEffect({
-              onSuccess: () => Effect.sync(resolve),
+              onSuccess: () => Effect.sync(ack),
               onFailure: (cause) =>
-                Effect.logWarning("Search: failed to apply changes to index", cause).pipe(
-                  Effect.andThen(Effect.sync(() => reject(cause))),
+                Effect.logWarning("Search: failed to apply change to index", cause).pipe(
+                  Effect.andThen(Effect.sync(nack)),
                 ),
             }),
           ),

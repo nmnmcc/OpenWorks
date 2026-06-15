@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
-import { AuthMiddleware } from "./middlewares/auth";
+import { AuthMiddleware, OptionalAuthMiddleware } from "./middlewares/auth";
 
 export class SpaceRuleEntry extends Schema.Class<SpaceRuleEntry>("SpaceRuleEntry")({
   id: Schema.String,
@@ -29,7 +29,7 @@ export class RulesGroup extends HttpApiGroup.make("rules")
       },
       success: Schema.Array(SpaceRuleEntry),
       error: [RuleForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("create", "/", {
       payload: Schema.Struct({
         spaceId: Schema.String,
@@ -39,7 +39,7 @@ export class RulesGroup extends HttpApiGroup.make("rules")
       }),
       success: SpaceRuleEntry,
       error: [RuleForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.patch("update", "/:id", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -49,12 +49,11 @@ export class RulesGroup extends HttpApiGroup.make("rules")
       }),
       success: SpaceRuleEntry,
       error: [RuleNotFound, RuleForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("delete", "/:id", {
       params: { id: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [RuleNotFound, RuleForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/rules") {}

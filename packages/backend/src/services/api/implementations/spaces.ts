@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import { and, eq, sql } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 import { v7 } from "uuid";
 
@@ -19,9 +19,10 @@ import {
   spaceMutes,
   spaces,
 } from "../../database/schema/space";
+import { spaceWorks } from "../../database/schema/space-work";
 import { Search } from "../../search";
 import { Api } from "../interfaces";
-import { CurrentUser } from "../interfaces/middlewares/auth";
+import { CurrentUser, CurrentUserOption } from "../interfaces/middlewares/auth";
 import {
   AlreadyMember,
   InvitationInvalid,
@@ -36,8 +37,12 @@ import {
   SpaceNotFound,
   SpaceSearchResult,
   SpaceSlugConflict,
+  SpaceWorkConflict,
+  SpaceWorkEntry,
+  SpaceWorkNotFound,
   UserBanned,
 } from "../interfaces/spaces";
+import { Work } from "../interfaces/works";
 
 export const SpacesHandlers = HttpApiBuilder.group(
   Api,
@@ -51,7 +56,7 @@ export const SpacesHandlers = HttpApiBuilder.group(
     return handlers
       .handle("search", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const limit = query.limit ?? config.pagination.searchDefaultLimit;
           const offset = query.offset ?? 0;
 
@@ -73,7 +78,10 @@ export const SpacesHandlers = HttpApiBuilder.group(
           const rows = yield* database.query.spaces.findMany({
             where: {
               id: { in: ids },
-              OR: [{ visibility: { ne: "private" } }, { members: { userId: user.id } }],
+              OR:
+                userId === undefined
+                  ? [{ visibility: { ne: "private" } }]
+                  : [{ visibility: { ne: "private" } }, { members: { userId } }],
             },
           });
 
@@ -98,14 +106,22 @@ export const SpacesHandlers = HttpApiBuilder.group(
       )
       .handle("list", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
           const offset = query.offset ?? 0;
+          if (query.joined === "true" && userId === undefined) {
+            return [];
+          }
           const rows = yield* database.query.spaces.findMany({
             where:
-              query.joined === "true"
-                ? { members: { userId: user.id } }
-                : { OR: [{ visibility: { ne: "private" } }, { members: { userId: user.id } }] },
+              query.joined === "true" && userId !== undefined
+                ? { members: { userId } }
+                : {
+                    OR:
+                      userId === undefined
+                        ? [{ visibility: { ne: "private" } }]
+                        : [{ visibility: { ne: "private" } }, { members: { userId } }],
+                  },
             orderBy: { createdAt: "desc" },
             limit,
             offset,
@@ -115,7 +131,7 @@ export const SpacesHandlers = HttpApiBuilder.group(
       )
       .handle("getById", ({ params }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const row = yield* database.query.spaces.findFirst({
             where: { id: params.id },
           });
@@ -123,12 +139,15 @@ export const SpacesHandlers = HttpApiBuilder.group(
             return yield* new SpaceNotFound();
           }
           if (row.visibility === "private") {
-            const membership = yield* database.query.spaceMembers.findFirst({
-              where: {
-                spaceId: row.id,
-                userId: user.id,
-              },
-            });
+            const membership =
+              userId === undefined
+                ? undefined
+                : yield* database.query.spaceMembers.findFirst({
+                    where: {
+                      spaceId: row.id,
+                      userId,
+                    },
+                  });
             if (!membership) {
               return yield* new SpaceForbidden();
             }
@@ -644,19 +663,22 @@ export const SpacesHandlers = HttpApiBuilder.group(
       )
       .handle("getMembership", ({ params }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
           const space = yield* database.query.spaces.findFirst({
             where: { id: params.id },
           });
           if (!space) {
             return yield* new SpaceNotFound();
           }
-          const member = yield* database.query.spaceMembers.findFirst({
-            where: {
-              spaceId: params.id,
-              userId: user.id,
-            },
-          });
+          const member =
+            userId === undefined
+              ? undefined
+              : yield* database.query.spaceMembers.findFirst({
+                  where: {
+                    spaceId: params.id,
+                    userId,
+                  },
+                });
           return member ? new SpaceMemberEntry(member) : null;
         }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
       )
@@ -1146,6 +1168,121 @@ export const SpacesHandlers = HttpApiBuilder.group(
           if (rows.length === 0) {
             return yield* new InvitationNotFound();
           }
+        }).pipe(
+          Effect.catchTag("AuthorizationError", () => new SpaceForbidden()),
+          Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),
+          Effect.catchTag("AliasError", () => new HttpApiError.InternalServerError()),
+          Effect.catchTag("RawRuleError", () => new HttpApiError.InternalServerError()),
+          Effect.catchTag("ConditionError", () => new HttpApiError.InternalServerError()),
+          Effect.catchTag("SubjectDetectionError", () => new HttpApiError.InternalServerError()),
+        ),
+      )
+      .handle("listWorks", ({ params, query }) =>
+        Effect.gen(function* () {
+          const space = yield* database.query.spaces.findFirst({
+            where: { id: params.id },
+          });
+          if (!space) {
+            return yield* new SpaceNotFound();
+          }
+          const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
+          const offset = query.offset ?? 0;
+          const rows = yield* database.query.spaceWorks.findMany({
+            where: { spaceId: params.id },
+            with: { work: true },
+            orderBy: { createdAt: "desc" },
+            limit,
+            offset,
+          });
+          return rows.flatMap((row) => {
+            if (!row.work) return [];
+            return [new SpaceWorkEntry({ ...row, work: new Work(row.work) })];
+          });
+        }).pipe(Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError())),
+      )
+      .handle("addWork", ({ params, payload }) =>
+        Effect.gen(function* () {
+          const user = yield* CurrentUser;
+          const space = yield* database.query.spaces.findFirst({
+            where: { id: params.id },
+          });
+          if (!space) {
+            return yield* new SpaceNotFound();
+          }
+          yield* authorization.check(user.id, params.id, {
+            action: "update",
+            subject: "Space",
+          });
+          const work = yield* database.query.works.findFirst({
+            where: { id: payload.workId },
+          });
+          if (!work) {
+            return yield* new SpaceWorkNotFound();
+          }
+          const existing = yield* database.query.spaceWorks.findFirst({
+            where: {
+              spaceId: params.id,
+              workId: payload.workId,
+            },
+          });
+          if (existing) {
+            return yield* new SpaceWorkConflict();
+          }
+          const [row] = yield* database
+            .insert(spaceWorks)
+            .values({
+              id: v7(),
+              spaceId: params.id,
+              workId: payload.workId,
+              addedById: user.id,
+            })
+            .returning();
+          yield* database.insert(modLog).values({
+            id: v7(),
+            spaceId: params.id,
+            moderatorId: user.id,
+            action: "work_add",
+            targetType: "work",
+            targetId: payload.workId,
+          });
+          return new SpaceWorkEntry({ ...row!, work: new Work(work) });
+        }).pipe(
+          Effect.catchTag("AuthorizationError", () => new SpaceForbidden()),
+          Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),
+          Effect.catchTag("AliasError", () => new HttpApiError.InternalServerError()),
+          Effect.catchTag("RawRuleError", () => new HttpApiError.InternalServerError()),
+          Effect.catchTag("ConditionError", () => new HttpApiError.InternalServerError()),
+          Effect.catchTag("SubjectDetectionError", () => new HttpApiError.InternalServerError()),
+        ),
+      )
+      .handle("removeWork", ({ params }) =>
+        Effect.gen(function* () {
+          const user = yield* CurrentUser;
+          const space = yield* database.query.spaces.findFirst({
+            where: { id: params.id },
+          });
+          if (!space) {
+            return yield* new SpaceNotFound();
+          }
+          yield* authorization.check(user.id, params.id, {
+            action: "update",
+            subject: "Space",
+          });
+          const rows = yield* database
+            .delete(spaceWorks)
+            .where(and(eq(spaceWorks.spaceId, params.id), eq(spaceWorks.workId, params.workId)))
+            .returning();
+          if (rows.length === 0) {
+            return yield* new SpaceWorkNotFound();
+          }
+          yield* database.insert(modLog).values({
+            id: v7(),
+            spaceId: params.id,
+            moderatorId: user.id,
+            action: "work_remove",
+            targetType: "work",
+            targetId: params.workId,
+          });
         }).pipe(
           Effect.catchTag("AuthorizationError", () => new SpaceForbidden()),
           Effect.catchTag("EffectDrizzleQueryError", () => new HttpApiError.InternalServerError()),

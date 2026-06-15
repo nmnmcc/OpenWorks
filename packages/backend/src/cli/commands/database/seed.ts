@@ -358,7 +358,9 @@ export const makeSeedData = Effect.gen(function* () {
     type: "book",
     title: "The Way of Kings",
     originalTitle: null,
-    description: content("The Way of Kings is an epic fantasy novel by Brandon Sanderson, the first in The Stormlight Archive series."),
+    description: content(
+      "The Way of Kings is an epic fantasy novel by Brandon Sanderson, the first in The Stormlight Archive series.",
+    ),
     coverUrl: null,
     releaseDate: new Date("2010-08-31"),
     isbn: "9780765326355",
@@ -478,7 +480,14 @@ export const makeSeedData = Effect.gen(function* () {
     { id: v7(), workId: workBook.id, creatorId: creatorAuthor.id, role: "author", characterName: null, position: 0 },
     { id: v7(), workId: workGame.id, creatorId: creatorStudio.id, role: "developer", characterName: null, position: 0 },
     { id: v7(), workId: workGame.id, creatorId: creatorStudio.id, role: "publisher", characterName: null, position: 1 },
-    { id: v7(), workId: workMovie.id, creatorId: creatorDirector.id, role: "director", characterName: null, position: 0 },
+    {
+      id: v7(),
+      workId: workMovie.id,
+      creatorId: creatorDirector.id,
+      role: "director",
+      characterName: null,
+      position: 0,
+    },
     { id: v7(), workId: workMovie.id, creatorId: creatorDirector.id, role: "writer", characterName: null, position: 1 },
   ];
 
@@ -552,7 +561,9 @@ export const makeSeedData = Effect.gen(function* () {
     id: v7(),
     title: "The Way of Kings is a masterpiece",
     type: "review",
-    content: content("This book completely changed my expectations for epic fantasy. The world-building is unparalleled."),
+    content: content(
+      "This book completely changed my expectations for epic fantasy. The world-building is unparalleled.",
+    ),
     authorId: admin.id,
     spaceId: null,
     workId: workBook.id,
@@ -586,6 +597,12 @@ export const makeSeedData = Effect.gen(function* () {
     },
   ];
 
+  const spaceWorks = [
+    { id: v7(), spaceId: engineering.id, workId: workGame.id, addedById: admin.id },
+    { id: v7(), spaceId: engineering.id, workId: workBook.id, addedById: admin.id },
+    { id: v7(), spaceId: design.id, workId: workMovie.id, addedById: bob.id },
+  ];
+
   return {
     users,
     accounts,
@@ -612,11 +629,13 @@ export const makeSeedData = Effect.gen(function* () {
     shelfItems,
     reviewPosts,
     workSystemRequirements,
+    spaceWorks,
   };
 });
 
 const deleteAllTables = (database: typeof Database.Service) =>
   Effect.gen(function* () {
+    yield* database.delete(schema.spaceWorks);
     yield* database.delete(schema.shelfItems);
     yield* database.delete(schema.shelves);
     yield* database.delete(schema.chapterProgress);
@@ -683,8 +702,9 @@ export const runSeed = (database: typeof Database.Service, clean: boolean) =>
     yield* database.insert(schema.votes).values(data.votes);
     yield* database.insert(schema.spaceBans).values(data.spaceBans);
     yield* database.insert(schema.workSystemRequirements).values(data.workSystemRequirements);
+    yield* database.insert(schema.spaceWorks).values(data.spaceWorks);
 
     yield* Console.log(
-      `Seeded: ${data.users.length} users, ${data.spaces.length} spaces, ${data.posts.length + data.reviewPosts.length} posts (${data.reviewPosts.length} reviews), ${data.creators.length} creators, ${data.works.length} works, ${data.workChapters.length} chapters, ${data.shelves.length} shelves`,
+      `Seeded: ${data.users.length} users, ${data.spaces.length} spaces, ${data.posts.length + data.reviewPosts.length} posts (${data.reviewPosts.length} reviews), ${data.creators.length} creators, ${data.works.length} works, ${data.workChapters.length} chapters, ${data.shelves.length} shelves, ${data.spaceWorks.length} space works`,
     );
   });

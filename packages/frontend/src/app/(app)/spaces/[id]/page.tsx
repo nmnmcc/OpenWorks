@@ -1,6 +1,5 @@
 "use client";
 
-import { postComposeDialogAtom } from "@/atoms/post-compose-dialog";
 import { spaceQuery } from "@/atoms/spaces";
 import { PostFeed } from "@/components/post/PostFeed";
 import { SectionBoundary } from "@/components/SectionBoundary";
@@ -10,20 +9,18 @@ import { JoinButton } from "@/components/space/JoinButton";
 import { SpaceSidebar } from "@/components/space/SpaceSidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n/locale";
 import { useAtomSet, useAtomSuspense } from "@effect/atom-react";
 import { Cause } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import { postComposeDialogAtom } from "@/atoms/post-compose-dialog";
+import { Button } from "@/components/ui/button";
 import { LockIcon, PlusIcon } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 
-type SortKind = "hot" | "new" | "top";
-
-function parseSort(value: string): SortKind {
-  return value === "new" ? "new" : value === "top" ? "top" : "hot";
-}
+const SORTS = ["hot", "new", "top"] as const;
+type SortKind = (typeof SORTS)[number];
 
 function isTaggedError(error: unknown, tag: string): boolean {
   return typeof error === "object" && error !== null && "_tag" in error && error._tag === tag;
@@ -33,7 +30,7 @@ function SpaceView({ id }: { readonly id: string }) {
   const [t] = useT();
   const result = useAtomSuspense(spaceQuery(id), { includeFailure: true });
   const setPostComposeDialog = useAtomSet(postComposeDialogAtom);
-  const [sort, setSort] = useState<SortKind>("hot");
+  const [sort, setSort] = useQueryState("sort", parseAsStringLiteral(SORTS).withDefault("hot"));
 
   if (AsyncResult.isFailure(result)) {
     const error = Cause.squash(result.cause);
@@ -66,35 +63,31 @@ function SpaceView({ id }: { readonly id: string }) {
             <h1 className="text-xl font-semibold wrap-anywhere">{space.name}</h1>
             {space.nsfw && <Badge variant="destructive">{t.post.nsfw}</Badge>}
           </div>
-          <p className="text-muted-foreground truncate text-sm">
-            {space.slug} · {t.spaces.members(space.memberCount)}
-          </p>
+          <p className="text-muted-foreground truncate text-sm">{space.slug}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={() => setPostComposeDialog({ open: true, spaceId: space.id })} variant="outline">
-            <PlusIcon />
-            {t.spaces.createPostHere}
-          </Button>
-          <JoinButton spaceId={space.id} />
-        </div>
+        <JoinButton spaceId={space.id} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
         <div className="flex min-w-0 flex-col gap-3">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-2">
+            <Button onClick={() => setPostComposeDialog({ open: true, spaceId: space.id })} size="sm">
+              <PlusIcon className="size-4" />
+              {t.spaces.createPostHere}
+            </Button>
             <SimpleSelect
               ariaLabel={t.feed.hot}
-              className="w-32"
+              className="w-32 shrink-0"
               items={[
                 { value: "hot", label: t.feed.hot },
                 { value: "new", label: t.feed.new },
                 { value: "top", label: t.feed.top },
               ]}
-              onChange={(value) => setSort(parseSort(value))}
+              onChange={(value) => setSort(value as SortKind)}
               value={sort}
             />
           </div>
-          <PostFeed spaceId={space.id} key={sort} sort={sort} />
+          <PostFeed hideSpace spaceId={space.id} key={sort} sort={sort} />
         </div>
 
         <SpaceSidebar space={space} />
@@ -108,12 +101,12 @@ function SpaceView({ id }: { readonly id: string }) {
  * +------------------------------------------+
  * | [Banner h-32 -- rounded-xl, border]      |
  * | (Avatar) Space Name [NSFW?]              |
- * |          slug · 42 members               |
- * | [+ New Post] [Join/Leave]                |
+ * |          slug                             |
+ * |                         [Join/Leave]     |
  * |------------------------------------------|
- * | [Sort: v Hot]                            |
- * | [PostCard]                               |
- * | [PostCard]                               |
+ * | [+ Post]              [Sort: v Hot]     |
+ * | [PostCard hideSpace]                     |
+ * | [PostCard hideSpace]                     |
  * |------------------------------------------|
  * | [SpaceSidebar]                           |
  * +------------------------------------------+
@@ -123,12 +116,12 @@ function SpaceView({ id }: { readonly id: string }) {
  * +------------------------------------------------+
  * | [Banner sm:h-44 -- rounded-xl, border]         |
  * | (Avatar) Space Name [NSFW?]                    |
- * |          slug · 42 members                     |
- * |                    [+ New Post] [Join/Leave]    |
+ * |          slug                                  |
+ * |                            [Join/Leave]        |
  * |------------------------------------------------|
- * | [Sort: v Hot]                                  |
- * | [PostCard]                                     |
- * | [PostCard]                                     |
+ * | [+ Post]                   [Sort: v Hot]      |
+ * | [PostCard hideSpace]                           |
+ * | [PostCard hideSpace]                           |
  * |------------------------------------------------|
  * | [SpaceSidebar]                                 |
  * +------------------------------------------------+
@@ -138,12 +131,12 @@ function SpaceView({ id }: { readonly id: string }) {
  * +------------------------------------------------------+
  * | [Banner sm:h-44 -- rounded-xl, border]               |
  * | (Avatar) Space Name [NSFW?]                          |
- * |          slug · 42 members                           |
- * |                      [+ New Post] [Join/Leave]       |
+ * |          slug                                        |
+ * |                              [Join/Leave]            |
  * +------------------------------------------------------+
- * | [Sort: v Hot]                 | SpaceSidebar (18rem) |
- * | [PostCard]                    | Description          |
- * | [PostCard]                    | 42 members           |
+ * | [+ Post]              [Sort] | SpaceSidebar (18rem) |
+ * | [PostCard hideSpace]          | Description          |
+ * | [PostCard hideSpace]          | 42 members           |
  * |                               | Rules (accordion)    |
  * | (1fr)                         | [Wiki] [Mod Tools]   |
  * +-------------------------------+----------------------+
@@ -151,14 +144,14 @@ function SpaceView({ id }: { readonly id: string }) {
  *
  * Ultra-wide (>=1536px):
  * +----------------------------------------------------------------+
- * | [Banner sm:h-44 -- rounded-xl, border]                         |
+ * | [Banner sm:h-44 -- rounded-xl, border]                        |
  * | (Avatar) Space Name [NSFW?]                                    |
- * |          slug · 42 members                                     |
- * |                              [+ New Post] [Join/Leave]         |
+ * |          slug                                                  |
+ * |                                       [Join/Leave]             |
  * +----------------------------------------------------------------+
- * | [Sort: v Hot]                         | SpaceSidebar (18rem)   |
- * | [PostCard]                            | Description            |
- * | [PostCard]                            | 42 members             |
+ * | [+ Post]             [Sort]           | SpaceSidebar (18rem)   |
+ * | [PostCard hideSpace]                  | Description            |
+ * | [PostCard hideSpace]                  | 42 members             |
  * |                                       | Rules (accordion)      |
  * | (1fr)                                 | [Wiki] [Mod Tools]     |
  * +---------------------------------------+------------------------+
@@ -166,9 +159,12 @@ function SpaceView({ id }: { readonly id: string }) {
  *
  * 无 max-w 包裹，填充父级宽度。banner 有条件渲染，<640px 时 h-32，>=640px 时 sm:h-44。
  * 头行宽度处置：头像自带 shrink-0；中间块 min-w-0 flex-1（吃掉余宽），
- * 名称 wrap-anywhere（超长无空格名断行）、slug·members 行 truncate；
- * 按钮组为固定宽（按钮自带 shrink-0），窄端整组经外层 flex-wrap 折到下一行
- * （Mobile 草图第三行即此状态）。宽端：中间块伸展，按钮组贴右。
+ * 名称 wrap-anywhere（超长无空格名断行）、slug 行 truncate；
+ * Join/Leave 按钮 shrink-0，窄端经外层 flex-wrap 折到下一行。宽端：中间块伸展，按钮贴右。
+ * 信息去重：成员数仅在 SpaceSidebar 显示（页头不重复）；帖子卡片隐藏社区名
+ * （hideSpace，当前页上下文已确立）。
+ * Feed 上方 [+ 发帖] 按钮预填 spaceId 打开 PostComposeDialog（与全局按钮
+ * 的区别：全局按钮不预填社区，本地按钮预填当前社区——行为差异满足去重规则）。
  * Feed + Sidebar 区域：>=1024px (lg) 时 grid 双列 (1fr + 18rem)；<1024px 时单列堆叠，sidebar 在 feed 下方。
  * 边界：Forbidden → 显示私密空间提示 (EmptyState + LockIcon)。
  *       NotFound → 显示未找到提示。

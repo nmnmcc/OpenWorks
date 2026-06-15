@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
-import { AuthMiddleware } from "./middlewares/auth";
+import { AuthMiddleware, OptionalAuthMiddleware, Unauthorized } from "./middlewares/auth";
 import { Work } from "./works";
 
 export class ShelfEntry extends Schema.Class<ShelfEntry>("ShelfEntry")({
@@ -24,7 +24,11 @@ export class ShelfItemEntry extends Schema.Class<ShelfItemEntry>("ShelfItemEntry
   createdAt: Schema.DateFromString,
 }) {}
 
-export class ShelfNotFound extends Schema.TaggedErrorClass<ShelfNotFound>()("ShelfNotFound", {}, { httpApiStatus: 404 }) {}
+export class ShelfNotFound extends Schema.TaggedErrorClass<ShelfNotFound>()(
+  "ShelfNotFound",
+  {},
+  { httpApiStatus: 404 },
+) {}
 
 export class ShelfForbidden extends Schema.TaggedErrorClass<ShelfForbidden>()(
   "ShelfForbidden",
@@ -54,13 +58,13 @@ export class ShelvesGroup extends HttpApiGroup.make("shelves")
         offset: Schema.optional(Schema.NumberFromString),
       },
       success: Schema.Array(ShelfEntry),
-      error: HttpApiError.InternalServerError,
-    }),
+      error: [Unauthorized, HttpApiError.InternalServerError],
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("getById", "/:id", {
       params: { id: Schema.String },
       success: ShelfEntry,
       error: [ShelfNotFound, ShelfForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("getItems", "/:id/items", {
       params: { id: Schema.String },
       query: {
@@ -69,7 +73,7 @@ export class ShelvesGroup extends HttpApiGroup.make("shelves")
       },
       success: Schema.Array(ShelfItemEntry),
       error: [ShelfNotFound, ShelfForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("create", "/", {
       payload: Schema.Struct({
         name: Schema.String,
@@ -78,7 +82,7 @@ export class ShelvesGroup extends HttpApiGroup.make("shelves")
       }),
       success: ShelfEntry,
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.patch("update", "/:id", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -88,12 +92,12 @@ export class ShelvesGroup extends HttpApiGroup.make("shelves")
       }),
       success: ShelfEntry,
       error: [ShelfNotFound, ShelfForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("delete", "/:id", {
       params: { id: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [ShelfNotFound, ShelfForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.post("addItem", "/:id/items", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -102,7 +106,7 @@ export class ShelvesGroup extends HttpApiGroup.make("shelves")
       }),
       success: ShelfItemEntry,
       error: [ShelfNotFound, ShelfForbidden, ShelfItemConflict, ShelfWorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("removeItem", "/:id/items", {
       params: { id: Schema.String },
       query: {
@@ -110,7 +114,6 @@ export class ShelvesGroup extends HttpApiGroup.make("shelves")
       },
       success: HttpApiSchema.NoContent,
       error: [ShelfNotFound, ShelfForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/shelves") {}

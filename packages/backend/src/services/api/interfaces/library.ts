@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
-import { AuthMiddleware } from "./middlewares/auth";
+import { AuthMiddleware, OptionalAuthMiddleware, Unauthorized } from "./middlewares/auth";
 import { Work } from "./works";
 
 export class LibraryItemEntry extends Schema.Class<LibraryItemEntry>("LibraryItemEntry")({
@@ -38,8 +38,8 @@ export class LibraryGroup extends HttpApiGroup.make("library")
         offset: Schema.optional(Schema.NumberFromString),
       },
       success: Schema.Array(LibraryItemEntry),
-      error: HttpApiError.InternalServerError,
-    }),
+      error: [Unauthorized, HttpApiError.InternalServerError],
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.put("upsert", "/", {
       payload: Schema.Struct({
         workId: Schema.String,
@@ -47,14 +47,13 @@ export class LibraryGroup extends HttpApiGroup.make("library")
       }),
       success: LibraryItemEntry,
       error: [LibraryWorkNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("remove", "/", {
       query: {
         workId: Schema.String,
       },
       success: HttpApiSchema.NoContent,
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(AuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/library") {}

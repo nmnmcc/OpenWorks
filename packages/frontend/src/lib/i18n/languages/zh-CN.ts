@@ -28,6 +28,7 @@ export default {
     updatedAt: "更新时间",
     edited: "已编辑",
     noResults: "没有找到结果",
+    viewAll: "查看全部",
   },
   nav: {
     home: "首页",
@@ -71,6 +72,8 @@ export default {
     top: "最高分",
     empty: "还没有帖子",
     emptyHint: "来发布第一条吧！",
+    newWorks: "最新作品",
+    popularWorks: "热门作品",
   },
   post: {
     pinned: "置顶",
@@ -117,6 +120,10 @@ export default {
     typeLink: "链接",
     typeImage: "图片",
     typePoll: "投票",
+    typeReview: "评测",
+    work: "作品",
+    linkedWork: "关联作品（可选）",
+    searchWork: "搜索作品…",
     postTitle: "标题",
     body: "正文",
     url: "链接地址",
@@ -191,6 +198,7 @@ export default {
     members: (n: number) => `${n} 位成员`,
     about: "社区简介",
     rules: "社区规则",
+    relatedWorks: "相关作品",
     wiki: "Wiki",
     modTools: "版务工具",
     created: "创建于",
@@ -232,6 +240,7 @@ export default {
       invitations: "邀请",
       reports: "举报",
       log: "版务日志",
+      works: "作品",
     },
     settings: {
       title: "社区设置",
@@ -256,6 +265,11 @@ export default {
       moveDown: "下移",
       empty: "还没有规则",
       editTitle: "编辑规则",
+    },
+    works: {
+      title: "相关作品",
+      add: "添加",
+      empty: "尚无相关作品。",
     },
     flairs: {
       title: "帖子标签",
@@ -358,6 +372,13 @@ export default {
     sendMessage: "发私信",
     editProfile: "编辑资料",
     noBio: "这个用户还没有填写简介。",
+    tabs: {
+      posts: "帖子",
+      reviews: "评测",
+      library: "库",
+      viewLibrary: "查看 TA 的库",
+      viewShelves: "查看 TA 的书架",
+    },
   },
   upload: {
     dropOrClick: "拖放图片或点击选择",
@@ -391,6 +412,13 @@ export default {
     resultCount: (n: number) => `${n} 条结果`,
     empty: "没有找到相关内容",
     prompt: "在上方搜索栏输入关键词开始搜索",
+    tabs: {
+      posts: "帖子",
+      works: "作品",
+      creators: "创作者",
+      spaces: "社区",
+      users: "用户",
+    },
   },
   invite: {
     title: "社区邀请",
@@ -540,6 +568,8 @@ export default {
     },
     overview: "概览",
     content: "内容",
+    relatedSpaces: "相关社区",
+    startDiscussion: "发起讨论",
     reviews: "评测",
     discussions: "讨论",
     variants: "版本",

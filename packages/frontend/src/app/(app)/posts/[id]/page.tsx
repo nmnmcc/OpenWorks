@@ -22,7 +22,10 @@ import { useAtomSet, useAtomSuspense } from "@effect/atom-react";
 import type { Post } from "@openworks/backend/api";
 import { ArrowLeftIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useMemo, useState, type FormEvent } from "react";
+
+const COMMENT_SORTS = ["top", "new"] as const;
 
 interface PostEditFormProps {
   readonly post: Post;
@@ -128,7 +131,7 @@ function PostDetail({ id }: { readonly id: string }) {
   const router = useRouter();
   const result = useAtomSuspense(postQuery(id));
   const [editing, setEditing] = useState(false);
-  const [sort, setSort] = useState<"top" | "new">("top");
+  const [sort, setSort] = useQueryState("sort", parseAsStringLiteral(COMMENT_SORTS).withDefault("top"));
 
   const post = result.value;
 
@@ -177,7 +180,7 @@ function PostDetail({ id }: { readonly id: string }) {
               { value: "top", label: t.comments.sortTop },
               { value: "new", label: t.comments.sortNew },
             ]}
-            onChange={(value) => setSort(value === "new" ? "new" : "top")}
+            onChange={(value) => setSort(value as "top" | "new")}
             value={sort}
           />
         </div>

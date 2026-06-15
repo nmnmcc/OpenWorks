@@ -14,31 +14,25 @@ export class Config extends Context.Service<Config>()("@openworks/backend/servic
     database: C.all({
       url: C.url("DATABASE_URL").pipe(C.map((u) => Redacted.make(u.toString()))),
     }),
-    meilisearch: C.all({
-      url: C.string("MEILI_URL").pipe(C.withDefault("http://127.0.0.1:17700")),
-      apiKey: C.option(C.redacted("MEILI_MASTER_KEY")),
-      postsIndex: C.string("MEILI_POSTS_INDEX").pipe(C.withDefault("posts")),
-      commentsIndex: C.string("MEILI_COMMENTS_INDEX").pipe(C.withDefault("comments")),
-      spacesIndex: C.string("MEILI_SPACES_INDEX").pipe(C.withDefault("spaces")),
-      usersIndex: C.string("MEILI_USERS_INDEX").pipe(C.withDefault("users")),
-      wikiPagesIndex: C.string("MEILI_WIKI_PAGES_INDEX").pipe(C.withDefault("wiki_pages")),
-      worksIndex: C.string("MEILI_WORKS_INDEX").pipe(C.withDefault("works")),
-      creatorsIndex: C.string("MEILI_CREATORS_INDEX").pipe(C.withDefault("creators")),
+    typesense: C.all({
+      host: C.string("TYPESENSE_HOST").pipe(C.withDefault("127.0.0.1")),
+      port: C.number("TYPESENSE_PORT").pipe(C.withDefault(8108)),
+      protocol: C.string("TYPESENSE_PROTOCOL").pipe(C.withDefault("http")),
+      apiKey: C.string("TYPESENSE_API_KEY").pipe(C.withDefault("openworks-dev-key")),
+      postsCollection: C.string("TYPESENSE_POSTS_COLLECTION").pipe(C.withDefault("posts")),
+      commentsCollection: C.string("TYPESENSE_COMMENTS_COLLECTION").pipe(C.withDefault("comments")),
+      spacesCollection: C.string("TYPESENSE_SPACES_COLLECTION").pipe(C.withDefault("spaces")),
+      usersCollection: C.string("TYPESENSE_USERS_COLLECTION").pipe(C.withDefault("users")),
+      wikiPagesCollection: C.string("TYPESENSE_WIKI_PAGES_COLLECTION").pipe(C.withDefault("wiki_pages")),
+      worksCollection: C.string("TYPESENSE_WORKS_COLLECTION").pipe(C.withDefault("works")),
+      creatorsCollection: C.string("TYPESENSE_CREATORS_COLLECTION").pipe(C.withDefault("creators")),
     }),
-    kafka: C.all({
-      brokers: C.string("KAFKA_BROKERS").pipe(
-        C.withDefault("127.0.0.1:19092"),
-        C.map((brokers) => brokers.split(",")),
+    rabbitmq: C.all({
+      url: C.string("RABBITMQ_URL").pipe(C.withDefault("amqp://guest:guest@127.0.0.1:5672")),
+      exchange: C.string("RABBITMQ_EXCHANGE").pipe(C.withDefault("openworks.cdc")),
+      routingKeyPrefix: C.string("RABBITMQ_ROUTING_KEY_PREFIX").pipe(
+        C.withDefault("sequin.openworks.public"),
       ),
-      consumerGroup: C.string("KAFKA_CONSUMER_GROUP").pipe(C.withDefault("openworks-search")),
-      postsTopic: C.string("KAFKA_POSTS_TOPIC").pipe(C.withDefault("openworks.public.posts")),
-      commentsTopic: C.string("KAFKA_COMMENTS_TOPIC").pipe(C.withDefault("openworks.public.comments")),
-      spacesTopic: C.string("KAFKA_SPACES_TOPIC").pipe(C.withDefault("openworks.public.spaces")),
-      usersTopic: C.string("KAFKA_USERS_TOPIC").pipe(C.withDefault("openworks.public.users")),
-      wikiPagesTopic: C.string("KAFKA_WIKI_PAGES_TOPIC").pipe(C.withDefault("openworks.public.wiki_pages")),
-      worksTopic: C.string("KAFKA_WORKS_TOPIC").pipe(C.withDefault("openworks.public.works")),
-      creatorsTopic: C.string("KAFKA_CREATORS_TOPIC").pipe(C.withDefault("openworks.public.creators")),
-      workAliasesTopic: C.string("KAFKA_WORK_ALIASES_TOPIC").pipe(C.withDefault("openworks.public.work_aliases")),
     }),
     s3: C.option(
       C.all({

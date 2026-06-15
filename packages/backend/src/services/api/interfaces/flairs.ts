@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
-import { AuthMiddleware } from "./middlewares/auth";
+import { AuthMiddleware, OptionalAuthMiddleware } from "./middlewares/auth";
 
 export class PostFlairEntry extends Schema.Class<PostFlairEntry>("PostFlairEntry")({
   id: Schema.String,
@@ -42,7 +42,7 @@ export class FlairsGroup extends HttpApiGroup.make("flairs")
       },
       success: Schema.Array(PostFlairEntry),
       error: [FlairForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("createPostFlair", "/post-flairs", {
       payload: Schema.Struct({
         spaceId: Schema.String,
@@ -51,7 +51,7 @@ export class FlairsGroup extends HttpApiGroup.make("flairs")
       }),
       success: PostFlairEntry,
       error: [FlairForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.patch("updatePostFlair", "/post-flairs/:id", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -60,12 +60,12 @@ export class FlairsGroup extends HttpApiGroup.make("flairs")
       }),
       success: PostFlairEntry,
       error: [FlairNotFound, FlairForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("deletePostFlair", "/post-flairs/:id", {
       params: { id: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [FlairNotFound, FlairForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("getUserFlair", "/user-flairs", {
       query: {
         spaceId: Schema.String,
@@ -73,7 +73,7 @@ export class FlairsGroup extends HttpApiGroup.make("flairs")
       },
       success: Schema.NullOr(UserFlairEntry),
       error: [FlairForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.put("setUserFlair", "/user-flairs", {
       payload: Schema.Struct({
         spaceId: Schema.String,
@@ -83,7 +83,7 @@ export class FlairsGroup extends HttpApiGroup.make("flairs")
       }),
       success: UserFlairEntry,
       error: [FlairForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("removeUserFlair", "/user-flairs", {
       query: {
         spaceId: Schema.String,
@@ -91,7 +91,6 @@ export class FlairsGroup extends HttpApiGroup.make("flairs")
       },
       success: HttpApiSchema.NoContent,
       error: [FlairForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/flairs") {}

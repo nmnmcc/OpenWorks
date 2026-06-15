@@ -70,7 +70,7 @@ export class CreatorsGroup extends HttpApiGroup.make("creators")
       }),
       success: Creator,
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.patch("update", "/:id", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -82,7 +82,7 @@ export class CreatorsGroup extends HttpApiGroup.make("creators")
       }),
       success: Creator,
       error: [CreatorNotFound, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("getRevisions", "/:id/revisions", {
       params: { id: Schema.String },
       query: {
@@ -93,5 +93,4 @@ export class CreatorsGroup extends HttpApiGroup.make("creators")
       error: [CreatorNotFound, HttpApiError.InternalServerError],
     }),
   )
-  .middleware(AuthMiddleware)
   .prefix("/creators") {}

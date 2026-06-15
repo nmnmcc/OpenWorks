@@ -5,7 +5,18 @@ import { useT } from "@/lib/i18n/locale";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const SECTIONS = ["settings", "rules", "flairs", "members", "bans", "mutes", "invitations", "reports", "log"] as const;
+const SECTIONS = [
+  "settings",
+  "rules",
+  "flairs",
+  "works",
+  "members",
+  "bans",
+  "mutes",
+  "invitations",
+  "reports",
+  "log",
+] as const;
 
 interface ModNavProps {
   readonly spaceId: string;

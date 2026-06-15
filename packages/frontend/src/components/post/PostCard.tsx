@@ -31,6 +31,9 @@ function safeHostname(url: string): string {
 interface PostCardProps {
   readonly post: Post;
   readonly detail?: boolean;
+  readonly hideSpace?: boolean;
+  readonly hideAuthor?: boolean;
+  readonly hideWork?: boolean;
   readonly onEdit?: () => void;
   readonly onDeleted?: () => void;
 }
@@ -72,9 +75,11 @@ interface PostCardProps {
  * 边界：已移除帖子 → 正文替换为斜体提示。
  *       剧透 → 内容隐藏，需点击按钮展开。
  *       长标题自然折行。无图片 → 不渲染 img。
- *       spaceId 为 null → 空间链接和分隔点隐藏。
+ *       spaceId 为 null 或 hideSpace → 空间链接和分隔点隐藏。
+ *       hideAuthor → 作者和分隔点隐藏（用户主页上下文已确立作者）。
+ *       hideWork → 作品链接徽章隐藏（作品详情页上下文已确立作品）。
  */
-export function PostCard({ post, detail = false, onEdit, onDeleted }: PostCardProps) {
+export function PostCard({ post, detail = false, hideSpace = false, hideAuthor = false, hideWork = false, onEdit, onDeleted }: PostCardProps) {
   const [t] = useT();
   const [spoilerRevealed, setSpoilerRevealed] = useState(false);
 
@@ -118,19 +123,23 @@ export function PostCard({ post, detail = false, onEdit, onDeleted }: PostCardPr
           {post.nsfw && <Badge variant="destructive">{t.post.nsfw}</Badge>}
           {post.spoiler && <Badge variant="outline">{t.post.spoiler}</Badge>}
           {post.removed && <Badge variant="destructive">{t.post.removed}</Badge>}
-          {post.workId && <WorkLink post={post} />}
+          {!hideWork && post.workId && <WorkLink post={post} />}
         </div>
 
         <div className="text-muted-foreground flex flex-wrap items-center gap-1 text-xs">
-          {post.spaceId !== null && (
+          {!hideSpace && post.spaceId !== null && (
             <>
               <SpaceLink className="text-foreground truncate" id={post.spaceId} />
               <span aria-hidden>·</span>
             </>
           )}
-          <span>{t.post.by}</span>
-          <UserLink className="truncate" id={post.authorId} />
-          <span aria-hidden>·</span>
+          {!hideAuthor && (
+            <>
+              <span>{t.post.by}</span>
+              <UserLink className="truncate" id={post.authorId} />
+              <span aria-hidden>·</span>
+            </>
+          )}
           <TimeAgo date={post.createdAt} />
           {isEdited && <span className="italic">({t.common.edited})</span>}
         </div>

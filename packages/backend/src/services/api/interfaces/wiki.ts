@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
 import { PortableText } from "../../../libraries/portable-text";
-import { AuthMiddleware } from "./middlewares/auth";
+import { AuthMiddleware, OptionalAuthMiddleware } from "./middlewares/auth";
 
 export class WikiPageEntry extends Schema.Class<WikiPageEntry>("WikiPageEntry")({
   id: Schema.String,
@@ -62,7 +62,7 @@ export class WikiGroup extends HttpApiGroup.make("wiki")
       },
       success: WikiPageSearchResult,
       error: HttpApiError.InternalServerError,
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("listPages", "/pages", {
       query: {
         spaceId: Schema.String,
@@ -71,12 +71,12 @@ export class WikiGroup extends HttpApiGroup.make("wiki")
       },
       success: Schema.Array(WikiPageEntry),
       error: [WikiForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.get("getPage", "/pages/:id", {
       params: { id: Schema.String },
       success: WikiPageEntry,
       error: [WikiPageNotFound, WikiForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
     HttpApiEndpoint.post("createPage", "/pages", {
       payload: Schema.Struct({
         spaceId: Schema.String,
@@ -86,7 +86,7 @@ export class WikiGroup extends HttpApiGroup.make("wiki")
       }),
       success: WikiPageEntry,
       error: [WikiForbidden, WikiSlugConflict, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.patch("updatePage", "/pages/:id", {
       params: { id: Schema.String },
       payload: Schema.Struct({
@@ -96,12 +96,12 @@ export class WikiGroup extends HttpApiGroup.make("wiki")
       }),
       success: WikiPageEntry,
       error: [WikiPageNotFound, WikiForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.delete("deletePage", "/pages/:id", {
       params: { id: Schema.String },
       success: HttpApiSchema.NoContent,
       error: [WikiPageNotFound, WikiForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(AuthMiddleware),
     HttpApiEndpoint.get("listRevisions", "/pages/:id/revisions", {
       params: { id: Schema.String },
       query: {
@@ -110,7 +110,6 @@ export class WikiGroup extends HttpApiGroup.make("wiki")
       },
       success: Schema.Array(WikiRevisionEntry),
       error: [WikiPageNotFound, WikiForbidden, HttpApiError.InternalServerError],
-    }),
+    }).middleware(OptionalAuthMiddleware),
   )
-  .middleware(AuthMiddleware)
   .prefix("/wiki") {}

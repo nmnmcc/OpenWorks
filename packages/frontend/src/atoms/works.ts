@@ -45,6 +45,13 @@ export const workVariantsQuery = (id: string) =>
     reactivityKeys: [Keys.workVariants(id)],
   });
 
+export const workSpacesQuery = (id: string) =>
+  ApiClient.query("works", "getSpaces", {
+    params: { id },
+    query: {},
+    reactivityKeys: [Keys.workSpaces(id)],
+  });
+
 export const workCreditsQuery = (id: string) =>
   ApiClient.query("works", "getCredits", {
     params: { id },

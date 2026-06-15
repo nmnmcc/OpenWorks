@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 import { v7 } from "uuid";
 
@@ -9,7 +9,7 @@ import { Database } from "../../database";
 import { wikiPages, wikiRevisions } from "../../database/schema/wiki";
 import { Search } from "../../search";
 import { Api } from "../interfaces";
-import { CurrentUser } from "../interfaces/middlewares/auth";
+import { CurrentUser, CurrentUserOption } from "../interfaces/middlewares/auth";
 import {
   WikiForbidden,
   WikiPageEntry,
@@ -27,6 +27,22 @@ export const WikiHandlers = HttpApiBuilder.group(
     const database = yield* Database;
     const authorization = yield* Authorization;
     const search = yield* Search;
+
+    /** Wiki 读取检查：登录用户走授权检查；匿名用户对公开空间放行，私有或不存在的空间拒绝。 */
+    const checkWikiRead = (userId: string | undefined, spaceId: string) =>
+      userId === undefined
+        ? Effect.gen(function* () {
+            const space = yield* database.query.spaces.findFirst({
+              where: { id: spaceId },
+            });
+            if (!space || space.visibility === "private") {
+              return yield* new WikiForbidden();
+            }
+          })
+        : authorization.check(userId, spaceId, {
+            action: "read",
+            subject: "WikiPage",
+          });
 
     return handlers
       .handle("search", ({ query }) =>
@@ -74,11 +90,8 @@ export const WikiHandlers = HttpApiBuilder.group(
       )
       .handle("listPages", ({ query }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
-          yield* authorization.check(user.id, query.spaceId, {
-            action: "read",
-            subject: "WikiPage",
-          });
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
+          yield* checkWikiRead(userId, query.spaceId);
           const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
           const offset = query.offset ?? 0;
           const rows = yield* database.query.wikiPages.findMany({
@@ -105,11 +118,8 @@ export const WikiHandlers = HttpApiBuilder.group(
           if (!row) {
             return yield* new WikiPageNotFound();
           }
-          const user = yield* CurrentUser;
-          yield* authorization.check(user.id, row.spaceId, {
-            action: "read",
-            subject: "WikiPage",
-          });
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
+          yield* checkWikiRead(userId, row.spaceId);
           return new WikiPageEntry(row);
         }).pipe(
           Effect.catchTag("AuthorizationError", () => new WikiForbidden()),
@@ -235,11 +245,8 @@ export const WikiHandlers = HttpApiBuilder.group(
           if (!page) {
             return yield* new WikiPageNotFound();
           }
-          const user = yield* CurrentUser;
-          yield* authorization.check(user.id, page.spaceId, {
-            action: "read",
-            subject: "WikiPage",
-          });
+          const userId = Option.getOrUndefined(yield* CurrentUserOption)?.id;
+          yield* checkWikiRead(userId, page.spaceId);
           const limit = Math.min(query.limit ?? config.pagination.defaultLimit, config.pagination.maxLimit);
           const offset = query.offset ?? 0;
           const rows = yield* database.query.wikiRevisions.findMany({

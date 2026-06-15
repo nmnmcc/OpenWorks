@@ -7,6 +7,25 @@ interface PortableTextViewProps {
   readonly className?: string;
 }
 
+/**
+ * Mobile / Tablet / Desktop / Ultra-wide (all identical):
+ *
+ * +----------------------------------------------+
+ * | Heading (h1/h2/h3 — font-semibold, sized)   |
+ * | Paragraph text with inline **bold**, *em*,   |
+ * | `code`, ~~strike~~, __underline__, [link]()  |
+ * |                                              |
+ * | > blockquote (border-s-2, ps-3)              |
+ * |                                              |
+ * | - bullet list (ps-5)                         |
+ * | 1. numbered list (ps-5)                      |
+ * +----------------------------------------------+
+ *   space-y-2 text-sm leading-relaxed wrap-anywhere
+ *
+ * All breakpoints: block-flow text content, width determined
+ * by parent container. No breakpoint-specific behavior — text
+ * reflows naturally. Long words break via wrap-anywhere.
+ */
 export function PortableTextView({ value, className }: PortableTextViewProps) {
   return (
     <div

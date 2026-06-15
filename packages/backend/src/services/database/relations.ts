@@ -96,6 +96,7 @@ export const relations = defineRelations(schema, (r) => ({
     rules: r.many.spaceRules(),
     modLog: r.many.modLog(),
     wikiPages: r.many.wikiPages(),
+    spaceWorks: r.many.spaceWorks(),
   },
   roles: {
     space: r.one.spaces({
@@ -416,6 +417,21 @@ export const relations = defineRelations(schema, (r) => ({
     systemRequirements: r.many.workSystemRequirements(),
     shelfItems: r.many.shelfItems(),
     posts: r.many.posts(),
+    spaceWorks: r.many.spaceWorks(),
+  },
+  spaceWorks: {
+    space: r.one.spaces({
+      from: r.spaceWorks.spaceId,
+      to: r.spaces.id,
+    }),
+    work: r.one.works({
+      from: r.spaceWorks.workId,
+      to: r.works.id,
+    }),
+    addedBy: r.one.users({
+      from: r.spaceWorks.addedById,
+      to: r.users.id,
+    }),
   },
   workRevisions: {
     work: r.one.works({
