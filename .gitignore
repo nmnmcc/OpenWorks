@@ -24,3 +24,5 @@ devenv.local.yaml
 /.dev
 
 .playwright*
+
+*.local.*

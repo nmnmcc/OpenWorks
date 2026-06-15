@@ -1,5 +1,6 @@
 {
   "private": true,
+  "license": "FSL-1.1-ALv2",
   "type": "module",
   "packageManager": "yarn@4.13.0",
   "workspaces": [
