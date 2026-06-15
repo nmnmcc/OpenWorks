@@ -41,6 +41,7 @@
 - **样式与 HTML 结构必须最简**。如果一个 class、wrapper 或属性的有无不影响渲染结果，则必须删除。零冗余，无死代码。
 - **URL 搜索参数一律用 [nuqs](https://nuqs.dev) 管理**。使用 `useQueryState`/`useQueryStates` 代替 `next/navigation` 的 `useSearchParams`。`NuqsAdapter` 已集成在 `Providers` 中。跨页面导航时构造完整 URL（如 `router.push("/path?key=...")` ）不受此限。
 - **使用 nuqs 的页面必须拆分为服务端 `page.tsx` + 客户端 `content.tsx`**。nuqs 内部调用 `useSearchParams`，Next.js 静态预渲染要求它处于 Suspense 边界之内。正确模式：`page.tsx` 保持为服务端组件（不加 `"use client"`），仅导入 `SectionBoundary` 和 `content.tsx` 的导出，用 `<SectionBoundary><XxxContent /></SectionBoundary>` 包裹；`content.tsx` 标注 `"use client"`，包含所有 `useQueryState`/`useQueryStates` 调用及页面交互逻辑。TSDoc 设计注释留在 `page.tsx`。禁止在 `page.tsx` 中直接标注 `"use client"` 后调用 nuqs hooks——构建时会报 `useSearchParams() should be wrapped in a suspense boundary` 并中断。
+- **使用 `useAtomSet`/`useAtomValue` 的页面必须用 `ClientOnly` 阻止预渲染**。`@effect/atom-react` 的 `useAtomSet`/`useAtomValue` 内部调用 `useSyncExternalStore` 但未提供 `getServerSnapshot`，Next.js 静态预渲染时会抛出 `Missing getServerSnapshot` 并中断构建。此类页面同样拆分为服务端 `page.tsx` + 客户端 `content.tsx`，且 `page.tsx` 必须用 `<SectionBoundary><ClientOnly><XxxContent /></ClientOnly></SectionBoundary>` 包裹（`ClientOnly` 来自 `@/components/ClientOnly`，SSR 时返回 null，客户端 mount 后才渲染子组件）。`useAtomSuspense` 不受此限——它会 suspend 并被 `SectionBoundary` 的 Suspense 捕获，仅需 `<SectionBoundary>` 即可。
 
 ## 前端交互铁律（`packages/frontend/`）
 
