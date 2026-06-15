@@ -44,6 +44,7 @@ export class Api extends HttpApi.make("api")
   .add(CreatorsGroup)
   .add(LibraryGroup)
   .add(ShelvesGroup)
+  .prefix("/api")
   .annotateMerge(
     OpenApi.annotations({
       title: "OpenWorks API",

@@ -1,17 +1,15 @@
 import type { NextConfig } from "next";
 
+const backendUrl = process.env.BACKEND_URL ?? "http://localhost:30000";
+
 const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@openworks/backend"],
   async rewrites() {
     return [
       {
-        source: "/api/auth/:path*",
-        destination: "http://localhost:30000/api/auth/:path*",
-      },
-      {
         source: "/api/:path*",
-        destination: "http://localhost:30000/:path*",
+        destination: `${backendUrl}/api/:path*`,
       },
     ];
   },

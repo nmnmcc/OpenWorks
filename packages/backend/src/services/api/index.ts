@@ -33,7 +33,7 @@ import { Api as Interfaces } from "./interfaces";
 import { AuthRoutes } from "./routes/auth";
 
 export const Api = HttpApiBuilder.layer(Interfaces, {
-  openapiPath: "/openapi.json",
+  openapiPath: "/api/openapi.json",
 }).pipe(
   Layer.provide([
     PostsHandlers.pipe(
@@ -168,7 +168,7 @@ export const Api = HttpApiBuilder.layer(Interfaces, {
     MediaHandlers.pipe(Layer.provide(AuthMiddlewareLive), Layer.provide(Auth.layer), Layer.provide(DatabasePool.layer)),
     AuthRoutes.pipe(Layer.provide(Auth.layer), Layer.provide(DatabasePool.layer)),
     HealthHandlers,
-    HttpApiScalar.layer(Interfaces, { path: "/docs" }),
+    HttpApiScalar.layer(Interfaces, { path: "/api/docs" }),
     Layer.unwrap(
       Effect.gen(function* () {
         const config = yield* Config;

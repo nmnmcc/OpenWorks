@@ -12,5 +12,4 @@ export class ApiClient extends AtomHttpApi.Service<ApiClient>()("ApiClient", {
       }),
     ),
   ),
-  baseUrl: "/api",
 }) {}

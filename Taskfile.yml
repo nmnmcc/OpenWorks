@@ -13,10 +13,22 @@ tasks:
     cmd: task --list-all
 
   dev:
-    desc: Start frontend and backend dev servers
-    deps:
-      - frontend:dev
-      - backend:dev
+    desc: Start development environment (services + app)
+    cmds:
+      - task: services
+      - nomad job run -var="project_root={{.ROOT_DIR}}" deploy/app.nomad.hcl
+
+  dev:stop:
+    desc: Stop app dev servers
+    cmd: nomad job stop app || true
+
+  dev:logs:
+    desc: Follow app logs (usage{{":"}} task dev:logs -- backend)
+    cmd: nomad alloc logs -f -job app {{.CLI_ARGS}}
+
+  dev:status:
+    desc: Show app status and ports
+    cmd: nomad job status app
 
   services:
     desc: Start Nomad agent and deploy infra services
@@ -39,12 +51,24 @@ tasks:
     cmd: docker network create openworks 2>/dev/null || true
 
   services:run:
-    desc: Deploy infrastructure job
-    cmd: nomad job run deploy/infra.nomad.hcl
+    desc: Deploy infrastructure jobs
+    cmds:
+      - nomad job run deploy/postgres.nomad.hcl
+      - nomad job run deploy/redis.nomad.hcl
+      - nomad job run deploy/rabbitmq.nomad.hcl
+      - nomad job run deploy/typesense.nomad.hcl
+      - nomad job run deploy/rustfs.nomad.hcl
+      - nomad job run deploy/sequin.nomad.hcl
 
   services:stop:
     desc: Stop infrastructure services (preserves data)
-    cmd: nomad job stop infra || true
+    cmds:
+      - nomad job stop postgres || true
+      - nomad job stop redis || true
+      - nomad job stop rabbitmq || true
+      - nomad job stop typesense || true
+      - nomad job stop rustfs || true
+      - nomad job stop sequin || true
 
   services:start:
     desc: Start stopped infrastructure services
@@ -55,16 +79,22 @@ tasks:
 
   services:status:
     desc: Show infrastructure status
-    cmd: nomad job status infra
+    cmd: nomad status
 
   services:logs:
-    desc: Show logs for a group (usage{{":"}} task services:logs -- postgres)
-    cmd: nomad alloc logs -job infra {{.CLI_ARGS}}
+    desc: Show logs for a service (usage{{":"}} task services:logs -- postgres)
+    cmd: nomad alloc logs -job {{.CLI_ARGS}}
 
   services:destroy:
-    desc: Destroy all infra data
+    desc: Destroy all infra and app data
     cmds:
-      - nomad job stop -purge infra 2>/dev/null || true
+      - nomad job stop -purge app 2>/dev/null || true
+      - nomad job stop -purge postgres 2>/dev/null || true
+      - nomad job stop -purge redis 2>/dev/null || true
+      - nomad job stop -purge rabbitmq 2>/dev/null || true
+      - nomad job stop -purge typesense 2>/dev/null || true
+      - nomad job stop -purge rustfs 2>/dev/null || true
+      - nomad job stop -purge sequin 2>/dev/null || true
       - >-
         docker volume rm
         openworks-postgres openworks-rabbitmq
