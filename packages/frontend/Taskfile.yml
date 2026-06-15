@@ -9,6 +9,10 @@ tasks:
     desc: Build Next.js for production
     cmd: yarn next build
 
+  build:docker:
+    desc: Build docker image
+    cmd: docker build -f ../../Dockerfile.frontend -t openworks/frontend ../..
+
   start:
     desc: Start Next.js production server
     cmd: yarn next start

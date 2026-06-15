@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Match, Queue, Stream } from "effect";
+import { Context, Duration, Effect, Layer, Match, Queue, Schedule, Stream } from "effect";
 import amqplib from "amqplib";
 import Typesense from "typesense";
 
@@ -153,7 +153,13 @@ export class Search extends Context.Service<Search>()("@openworks/backend/servic
       connectionTimeoutSeconds: 2,
     });
 
-    yield* Effect.tryPromise(() => client.health.retrieve());
+    yield* Effect.tryPromise(() => client.health.retrieve()).pipe(
+      Effect.retry(Schedule.exponential("1 second").pipe(
+        Schedule.modifyDelay((_, delay) => Effect.succeed(Duration.min(delay, Duration.seconds(10)))),
+        Schedule.take(10),
+      )),
+      Effect.tap(() => Effect.log("Search: Typesense is healthy")),
+    );
 
     const {
       postsCollection: postsCollectionName,
@@ -687,7 +693,13 @@ export namespace Search {
       const search = yield* Search;
 
       const connection = yield* Effect.acquireRelease(
-        Effect.tryPromise(() => amqplib.connect(config.rabbitmq.url)),
+        Effect.tryPromise(() => amqplib.connect(config.rabbitmq.url)).pipe(
+          Effect.retry(Schedule.exponential("1 second").pipe(
+            Schedule.modifyDelay((_, delay) => Effect.succeed(Duration.min(delay, Duration.seconds(10)))),
+            Schedule.take(10),
+          )),
+          Effect.tap(() => Effect.log("Search: connected to RabbitMQ")),
+        ),
         (conn) => Effect.promise(() => conn.close()),
       );
 

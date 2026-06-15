@@ -1,6 +1,6 @@
 import { PgClient } from "@effect/sql-pg";
 import * as EffectPostgres from "drizzle-orm/effect-postgres";
-import { Context, Effect, Layer, Redacted } from "effect";
+import { Context, Duration, Effect, Layer, Redacted, Schedule } from "effect";
 import { Reactivity } from "effect/unstable/reactivity";
 import { Pool } from "pg";
 
@@ -38,7 +38,7 @@ export namespace DatabasePool {
     Effect.gen(function* () {
       const config = yield* Config;
 
-      return yield* Effect.acquireRelease(
+      const pool = yield* Effect.acquireRelease(
         Effect.sync(
           () =>
             new Pool({
@@ -47,6 +47,19 @@ export namespace DatabasePool {
         ),
         (pool) => Effect.tryPromise(() => pool.end()),
       );
+
+      yield* Effect.tryPromise(async () => {
+        const client = await pool.connect();
+        client.release();
+      }).pipe(
+        Effect.retry(Schedule.exponential("1 second").pipe(
+          Schedule.modifyDelay((_, delay) => Effect.succeed(Duration.min(delay, Duration.seconds(10)))),
+          Schedule.take(10),
+        )),
+        Effect.tap(() => Effect.log("Database: connected to PostgreSQL")),
+      );
+
+      return pool;
     }),
   );
 }

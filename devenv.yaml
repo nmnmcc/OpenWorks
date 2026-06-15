@@ -1,11 +1,10 @@
-# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json
 inputs:
-  nixpkgs:
-    url: github:cachix/devenv-nixpkgs/rolling
   hashicorp:
     url: github:nmnmcc/HashiCorpNix
     inputs:
       nixpkgs:
         follows: nixpkgs
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
 nixpkgs:
-  allowUnfree: true
+  allow_unfree: true

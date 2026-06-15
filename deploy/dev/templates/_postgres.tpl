@@ -1,31 +1,15 @@
-variable "network" {
-  default = "openworks"
-}
-
-variable "postgres_db" {
-  default = "openworks"
-}
-
-variable "postgres_user" {
-  default = "openworks"
-}
-
-variable "postgres_password" {
-  default = "openworks"
-}
-
-variable "sequin_db" {
-  default = "sequin"
-}
-
-job "postgres" {
-  type = "service"
-
+[[ define "postgres" -]]
   group "postgres" {
+    service {
+      name     = "postgres"
+      port     = "db"
+      provider = "nomad"
+    }
+
     network {
       port "db" {
-        static = 15432
-        to     = 5432
+        to           = 5432
+        host_network = "loopback"
       }
     }
 
@@ -34,7 +18,7 @@ job "postgres" {
 
       config {
         image           = "postgres:17"
-        network_mode    = var.network
+        network_mode    = "[[ var "network" . ]]"
         network_aliases = ["postgres"]
         ports           = ["db"]
         args            = ["-c", "config_file=/etc/postgresql/custom.conf"]
@@ -52,9 +36,9 @@ job "postgres" {
       }
 
       env {
-        POSTGRES_DB       = var.postgres_db
-        POSTGRES_USER     = var.postgres_user
-        POSTGRES_PASSWORD = var.postgres_password
+        POSTGRES_DB       = "[[ var "postgres_db" . ]]"
+        POSTGRES_USER     = "[[ var "postgres_user" . ]]"
+        POSTGRES_PASSWORD = "[[ var "postgres_password" . ]]"
       }
 
       template {
@@ -71,8 +55,8 @@ job "postgres" {
         #!/bin/bash
         set -e
         psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-            CREATE DATABASE ${var.sequin_db};
-            GRANT ALL PRIVILEGES ON DATABASE ${var.sequin_db} TO $POSTGRES_USER;
+            CREATE DATABASE [[ var "sequin_db" . ]];
+            GRANT ALL PRIVILEGES ON DATABASE [[ var "sequin_db" . ]] TO $POSTGRES_USER;
         EOSQL
         EOF
 
@@ -86,4 +70,4 @@ job "postgres" {
       }
     }
   }
-}
+[[- end ]]

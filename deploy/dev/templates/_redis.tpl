@@ -1,15 +1,15 @@
-variable "network" {
-  default = "openworks"
-}
-
-job "redis" {
-  type = "service"
-
+[[ define "redis" -]]
   group "redis" {
+    service {
+      name     = "redis"
+      port     = "redis"
+      provider = "nomad"
+    }
+
     network {
       port "redis" {
-        static = 16379
-        to     = 6379
+        to           = 6379
+        host_network = "loopback"
       }
     }
 
@@ -18,7 +18,7 @@ job "redis" {
 
       config {
         image           = "redis:7"
-        network_mode    = var.network
+        network_mode    = "[[ var "network" . ]]"
         network_aliases = ["redis"]
         ports           = ["redis"]
       }
@@ -29,4 +29,4 @@ job "redis" {
       }
     }
   }
-}
+[[- end ]]

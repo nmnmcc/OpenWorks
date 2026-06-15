@@ -1,0 +1,12 @@
+.git
+.github
+.dev
+.devenv*
+.direnv
+.next
+.playwright*
+node_modules
+*.tsbuildinfo
+deploy
+references
+devenv.*

@@ -13,88 +13,33 @@ tasks:
     cmd: task --list-all
 
   dev:
-    desc: Start development environment (services + app)
+    desc: Start development environment, Ctrl+C stops all
     cmds:
-      - task: services
-      - nomad job run -var="project_root={{.ROOT_DIR}}" deploy/app.nomad.hcl
+      - task: dev:setup
+      - nomad-pack run deploy/dev --var project_root={{.ROOT_DIR}}
+      - defer: nomad job stop dev || true
+      - cmd: |-
+          alloc=$(nomad job allocs -json dev | jq -r '.[] | select(.TaskGroup == "app") | .ID' | head -1)
+          exec nomad alloc logs -f "$alloc" backend
 
   dev:stop:
-    desc: Stop app dev servers
-    cmd: nomad job stop app || true
-
-  dev:logs:
-    desc: Follow app logs (usage{{":"}} task dev:logs -- backend)
-    cmd: nomad alloc logs -f -job app {{.CLI_ARGS}}
+    desc: Stop all services
+    cmd: nomad job stop dev || true
 
   dev:status:
-    desc: Show app status and ports
-    cmd: nomad job status app
+    desc: Show status of all services
+    cmd: nomad job status dev
 
-  services:
-    desc: Start Nomad agent and deploy infra services
+  dev:logs:
+    desc: Follow logs (usage{{":"}} task dev:logs -- backend)
+    cmd: |-
+      alloc=$(nomad job allocs -json dev | jq -r --arg t "{{.CLI_ARGS}}" '.[] | select(.TaskStates[$t] != null) | .ID' | head -1)
+      exec nomad alloc logs -f "$alloc" "{{.CLI_ARGS}}"
+
+  dev:destroy:
+    desc: Destroy all services and data
     cmds:
-      - task: services:agent
-      - task: services:network
-      - task: services:run
-
-  services:agent:
-    desc: Start Nomad dev agent (idempotent)
-    status:
-      - nomad agent-info > /dev/null 2>&1
-    cmds:
-      - mkdir -p .dev
-      - nohup nomad agent -dev -log-level=warn -bind=127.0.0.1 -config=deploy/nomad-dev.hcl > .dev/nomad.log 2>&1 &
-      - until nomad agent-info > /dev/null 2>&1; do sleep 1; done
-
-  services:network:
-    desc: Create Docker network (idempotent)
-    cmd: docker network create openworks 2>/dev/null || true
-
-  services:run:
-    desc: Deploy infrastructure jobs
-    cmds:
-      - nomad job run deploy/postgres.nomad.hcl
-      - nomad job run deploy/redis.nomad.hcl
-      - nomad job run deploy/rabbitmq.nomad.hcl
-      - nomad job run deploy/typesense.nomad.hcl
-      - nomad job run deploy/rustfs.nomad.hcl
-      - nomad job run deploy/sequin.nomad.hcl
-
-  services:stop:
-    desc: Stop infrastructure services (preserves data)
-    cmds:
-      - nomad job stop postgres || true
-      - nomad job stop redis || true
-      - nomad job stop rabbitmq || true
-      - nomad job stop typesense || true
-      - nomad job stop rustfs || true
-      - nomad job stop sequin || true
-
-  services:start:
-    desc: Start stopped infrastructure services
-    cmds:
-      - task: services:agent
-      - task: services:network
-      - task: services:run
-
-  services:status:
-    desc: Show infrastructure status
-    cmd: nomad status
-
-  services:logs:
-    desc: Show logs for a service (usage{{":"}} task services:logs -- postgres)
-    cmd: nomad alloc logs -job {{.CLI_ARGS}}
-
-  services:destroy:
-    desc: Destroy all infra and app data
-    cmds:
-      - nomad job stop -purge app 2>/dev/null || true
-      - nomad job stop -purge postgres 2>/dev/null || true
-      - nomad job stop -purge redis 2>/dev/null || true
-      - nomad job stop -purge rabbitmq 2>/dev/null || true
-      - nomad job stop -purge typesense 2>/dev/null || true
-      - nomad job stop -purge rustfs 2>/dev/null || true
-      - nomad job stop -purge sequin 2>/dev/null || true
+      - nomad job stop -purge dev 2>/dev/null || true
       - >-
         docker volume rm
         openworks-postgres openworks-rabbitmq
@@ -102,11 +47,26 @@ tasks:
         2>/dev/null || true
       - docker network rm openworks 2>/dev/null || true
 
-  services:reset:
-    desc: Recreate all infrastructure (destroys data)
+  dev:reset:
+    desc: Destroy all data and restart
     cmds:
-      - task: services:destroy
-      - task: services
+      - task: dev:destroy
+      - task: dev
+
+  dev:setup:
+    internal: true
+    cmds:
+      - task: dev:agent
+      - docker network create openworks 2>/dev/null || true
+
+  dev:agent:
+    internal: true
+    status:
+      - nomad agent-info > /dev/null 2>&1
+    cmds:
+      - mkdir -p .dev
+      - nohup nomad agent -dev -log-level=warn -bind=127.0.0.1 -config=deploy/nomad-dev.hcl > .dev/nomad.log 2>&1 &
+      - until nomad agent-info > /dev/null 2>&1; do sleep 1; done
 
   build:
     desc: Build all packages

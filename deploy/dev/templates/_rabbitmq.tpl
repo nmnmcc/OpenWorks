@@ -1,27 +1,19 @@
-variable "network" {
-  default = "openworks"
-}
-
-variable "rabbitmq_user" {
-  default = "guest"
-}
-
-variable "rabbitmq_password" {
-  default = "guest"
-}
-
-job "rabbitmq" {
-  type = "service"
-
+[[ define "rabbitmq" -]]
   group "rabbitmq" {
+    service {
+      name     = "rabbitmq"
+      port     = "amqp"
+      provider = "nomad"
+    }
+
     network {
       port "amqp" {
-        static = 15672
-        to     = 5672
+        to           = 5672
+        host_network = "loopback"
       }
       port "management" {
-        static = 25672
-        to     = 15672
+        to           = 15672
+        host_network = "loopback"
       }
     }
 
@@ -30,7 +22,7 @@ job "rabbitmq" {
 
       config {
         image           = "rabbitmq:4-management"
-        network_mode    = var.network
+        network_mode    = "[[ var "network" . ]]"
         network_aliases = ["rabbitmq"]
         ports           = ["amqp", "management"]
 
@@ -42,8 +34,8 @@ job "rabbitmq" {
       }
 
       env {
-        RABBITMQ_DEFAULT_USER = var.rabbitmq_user
-        RABBITMQ_DEFAULT_PASS = var.rabbitmq_password
+        RABBITMQ_DEFAULT_USER = "[[ var "rabbitmq_user" . ]]"
+        RABBITMQ_DEFAULT_PASS = "[[ var "rabbitmq_password" . ]]"
       }
 
       resources {
@@ -52,4 +44,4 @@ job "rabbitmq" {
       }
     }
   }
-}
+[[- end ]]

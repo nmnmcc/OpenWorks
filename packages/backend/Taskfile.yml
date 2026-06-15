@@ -36,3 +36,7 @@ tasks:
   search:reindex:
     desc: Reindex all posts in Meilisearch
     cmd: yarn run -T tsx src/cli/index.ts search reindex
+
+  build:docker:
+    desc: Build docker image
+    cmd: docker build -f ../../Dockerfile.backend -t openworks/backend ../..

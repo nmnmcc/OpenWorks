@@ -9,9 +9,9 @@ FROM node:24-slim
 WORKDIR /app
 RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/backend/node_modules ./packages/backend/node_modules
 COPY --from=deps /app/package.json ./
 COPY --from=deps /app/.yarnrc.yml ./
+COPY tsconfig.base.json ./
 COPY packages/backend ./packages/backend
 EXPOSE 30000
 CMD ["yarn", "run", "-T", "tsx", "packages/backend/src/index.ts"]
