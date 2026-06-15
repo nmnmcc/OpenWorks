@@ -3,15 +3,25 @@ WORKDIR /app
 RUN corepack enable
 COPY package.json yarn.lock .yarnrc.yml ./
 COPY packages/backend/package.json ./packages/backend/
+RUN yarn workspaces focus @openworks/backend --production
+
+FROM node:24-slim AS builder
+WORKDIR /app
+RUN corepack enable
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY packages/backend/package.json ./packages/backend/
 RUN yarn workspaces focus @openworks/backend
+COPY packages/backend/src ./packages/backend/src
+COPY packages/backend/tsconfig.json ./packages/backend/
+COPY packages/backend/rolldown.config.ts ./packages/backend/
+COPY tsconfig.base.json ./
+RUN cd packages/backend && yarn rolldown -c
 
 FROM node:24-slim
 WORKDIR /app
-RUN corepack enable
+ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json ./
-COPY --from=deps /app/.yarnrc.yml ./
-COPY tsconfig.base.json ./
-COPY packages/backend ./packages/backend
+COPY --from=builder /app/packages/backend/dist ./dist
 EXPOSE 30000
-CMD ["yarn", "run", "-T", "tsx", "packages/backend/src/index.ts"]
+CMD ["node", "--enable-source-maps", "dist/index.mjs"]

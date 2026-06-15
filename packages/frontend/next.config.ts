@@ -8,10 +8,14 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   async rewrites() {
     return [
-      {
-        source: "/api/:path*",
-        destination: new URL("/api/:path*", config.backend.url).toString(),
-      },
+      ...(config.backend.url
+        ? [
+            {
+              source: "/api/:path*",
+              destination: new URL("/api/:path*", config.backend.url).toString(),
+            },
+          ]
+        : []),
     ];
   },
 };

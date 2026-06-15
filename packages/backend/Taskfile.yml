@@ -25,6 +25,10 @@ tasks:
     desc: Open Drizzle Studio
     cmd: yarn drizzle-kit studio
 
+  build:
+    desc: Build backend with Rolldown
+    cmd: npx rolldown -c
+
   lint:
     desc: Run ESLint
     cmd: yarn eslint src/
