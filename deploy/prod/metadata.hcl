@@ -3,7 +3,7 @@ app {
 }
 
 pack {
-  name        = "prod"
+  name        = "openworks-prod"
   description = "OpenWorks production environment"
   version     = "0.1.0"
 }

@@ -3,7 +3,7 @@ app {
 }
 
 pack {
-  name        = "dev"
+  name        = "openworks-dev"
   description = "OpenWorks development environment"
   version     = "0.1.0"
 }
