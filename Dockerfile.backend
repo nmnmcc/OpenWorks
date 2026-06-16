@@ -14,8 +14,13 @@ RUN yarn workspaces focus @openworks/backend
 COPY packages/backend/src ./packages/backend/src
 COPY packages/backend/tsconfig.json ./packages/backend/
 COPY packages/backend/rolldown.config.ts ./packages/backend/
+COPY packages/backend/drizzle.config.ts ./packages/backend/
 COPY tsconfig.base.json ./
 RUN cd packages/backend && yarn rolldown -c
+
+FROM builder AS migrate
+WORKDIR /app/packages/backend
+CMD ["npx", "drizzle-kit", "migrate"]
 
 FROM node:24-slim
 WORKDIR /app

@@ -1,10 +1,13 @@
-name: Build and Push Images
+name: CI/CD
 
 on:
   push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: cicd-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -15,7 +18,16 @@ jobs:
       packages: write
     strategy:
       matrix:
-        package: [backend, frontend]
+        include:
+          - package: backend
+            file: Dockerfile.backend
+            target: ""
+          - package: frontend
+            file: Dockerfile.frontend
+            target: ""
+          - package: migrate
+            file: Dockerfile.backend
+            target: migrate
     steps:
       - uses: actions/checkout@v4
 
@@ -30,10 +42,108 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.${{ matrix.package }}
-          push: true
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target || '' }}
+          push: ${{ github.event_name == 'push' }}
           tags: |
             ghcr.io/nmnmcc/openworks/${{ matrix.package }}:latest
             ghcr.io/nmnmcc/openworks/${{ matrix.package }}:sha-${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.package }}
           cache-to: type=gha,mode=max,scope=${{ matrix.package }}
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: Fetch current Nomad job
+        run: |
+          curl -sf \
+            -H "CF-Access-Client-Id: ${{ secrets.CF_ACCESS_CLIENT_ID }}" \
+            -H "CF-Access-Client-Secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
+            https://nomad.rezics.com/v1/job/openworks > /tmp/job.json
+
+      - name: Update image tags
+        run: |
+          TAG="sha-${{ github.sha }}"
+          BACKEND="ghcr.io/nmnmcc/openworks/backend:${TAG}"
+          FRONTEND="ghcr.io/nmnmcc/openworks/frontend:${TAG}"
+          MIGRATE="ghcr.io/nmnmcc/openworks/migrate:${TAG}"
+
+          jq --arg be "$BACKEND" --arg fe "$FRONTEND" --arg mg "$MIGRATE" '
+            .TaskGroups |= map(
+              if .Name == "app" then
+                .Tasks |= map(
+                  if .Name == "migrate" then .Config.image = $mg
+                  elif .Name == "backend" then .Config.image = $be
+                  elif .Name == "frontend" then .Config.image = $fe
+                  else . end
+                )
+              else . end
+            ) | { Job: . }
+          ' /tmp/job.json > /tmp/deploy.json
+
+      - name: Submit to Nomad
+        id: nomad
+        run: |
+          RESPONSE=$(curl -sf -X POST \
+            -H "CF-Access-Client-Id: ${{ secrets.CF_ACCESS_CLIENT_ID }}" \
+            -H "CF-Access-Client-Secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/deploy.json \
+            https://nomad.rezics.com/v1/jobs)
+          EVAL_ID=$(echo "$RESPONSE" | jq -r '.EvalID')
+          echo "eval_id=$EVAL_ID" >> "$GITHUB_OUTPUT"
+          echo "Deployment submitted — EvalID: $EVAL_ID"
+
+      - name: Wait for deployment
+        run: |
+          EVAL_ID="${{ steps.nomad.outputs.eval_id }}"
+          echo "Waiting for evaluation $EVAL_ID..."
+
+          for i in $(seq 1 30); do
+            EVAL=$(curl -sf \
+              -H "CF-Access-Client-Id: ${{ secrets.CF_ACCESS_CLIENT_ID }}" \
+              -H "CF-Access-Client-Secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
+              https://nomad.rezics.com/v1/evaluation/$EVAL_ID)
+            STATUS=$(echo "$EVAL" | jq -r '.Status')
+
+            if [ "$STATUS" = "complete" ]; then
+              DEPLOY_ID=$(echo "$EVAL" | jq -r '.DeploymentID')
+              if [ "$DEPLOY_ID" != "null" ] && [ -n "$DEPLOY_ID" ]; then
+                echo "Deployment $DEPLOY_ID started. Waiting for healthy..."
+                for j in $(seq 1 60); do
+                  DEPLOY=$(curl -sf \
+                    -H "CF-Access-Client-Id: ${{ secrets.CF_ACCESS_CLIENT_ID }}" \
+                    -H "CF-Access-Client-Secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
+                    https://nomad.rezics.com/v1/deployment/$DEPLOY_ID)
+                  DEPLOY_STATUS=$(echo "$DEPLOY" | jq -r '.Status')
+                  echo "  Deployment status: $DEPLOY_STATUS (attempt $j/60)"
+                  if [ "$DEPLOY_STATUS" = "successful" ]; then
+                    echo "Deployment successful!"
+                    exit 0
+                  elif [ "$DEPLOY_STATUS" = "failed" ] || [ "$DEPLOY_STATUS" = "cancelled" ]; then
+                    echo "Deployment $DEPLOY_STATUS"
+                    exit 1
+                  fi
+                  sleep 10
+                done
+                echo "Deployment timed out"
+                exit 1
+              fi
+              echo "Evaluation complete (no deployment created — no changes)"
+              exit 0
+            elif [ "$STATUS" = "failed" ] || [ "$STATUS" = "canceled" ]; then
+              echo "Evaluation $STATUS"
+              exit 1
+            fi
+
+            echo "  Evaluation status: $STATUS (attempt $i/30)"
+            sleep 5
+          done
+          echo "Evaluation timed out"
+          exit 1
