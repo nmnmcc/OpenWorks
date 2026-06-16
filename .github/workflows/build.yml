@@ -78,7 +78,7 @@ jobs:
             .TaskGroups |= map(
               if .Name == "app" then
                 .Tasks |= map(
-                  if .Name == "migrate" then .Config.image = $mg
+                  if .Name == "migrate" then .Config.image = $mg | .Config.args = ["until npx drizzle-kit migrate --config=drizzle.config.ts 2>&1; do echo Waiting for database...; sleep 2; done"]
                   elif .Name == "backend" then .Config.image = $be
                   elif .Name == "frontend" then .Config.image = $fe
                   else . end
